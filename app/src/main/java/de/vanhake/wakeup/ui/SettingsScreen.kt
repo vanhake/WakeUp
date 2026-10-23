@@ -50,6 +50,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import de.vanhake.wakeup.BuildConfig
 import de.vanhake.wakeup.data.AlarmRepository
 import de.vanhake.wakeup.data.BarcodeRepository
 import de.vanhake.wakeup.data.ChallengeType
@@ -158,6 +159,13 @@ fun SettingsScreen(onClose: () -> Unit) {
             }
             Spacer(Modifier.height(20.dp))
             BigButton(text = "Barcode hinzufügen", icon = Icons.Filled.QrCodeScanner, onClick = { adding = true })
+
+            SectionTitle("Über")
+            Text(
+                "WakeUp ${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Spacer(Modifier.height(24.dp))
         }
     }

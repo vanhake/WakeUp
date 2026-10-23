@@ -6,6 +6,23 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// Automatic versioning: every commit increases versionCode and the patch number.
+// Bump the major/minor version here for bigger releases.
+val baseVersion = "1.1"
+val commitCount: Int = runCatching {
+    providers.exec { commandLine("git", "rev-list", "--count", "HEAD") }
+        .standardOutput.asText.get().trim().toInt()
+}.getOrDefault(1)
+val appVersionName = "$baseVersion.$commitCount"
+
+base {
+    archivesName.set("WakeUp-$appVersionName")
+}
+
+tasks.register("printVersionName") {
+    doLast { println(appVersionName) }
+}
+
 android {
     namespace = "de.vanhake.wakeup"
     compileSdk = 35
@@ -14,8 +31,8 @@ android {
         applicationId = "de.vanhake.wakeup"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = commitCount
+        versionName = appVersionName
     }
 
     buildTypes {
@@ -33,6 +50,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

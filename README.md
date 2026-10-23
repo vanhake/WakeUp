@@ -37,6 +37,14 @@ Beim ersten Start die angezeigten Berechtigungen erlauben (Benachrichtigungen, e
 Vollbild-Anzeige, „Über anderen Apps einblenden“ – ohne Letzteres öffnet sich der Wecker bei
 entsperrtem Handy nicht von selbst, sondern nur über die Benachrichtigung). Für die Barcode-Aufgabe wird die Kamera benötigt.
 
+## Versionierung
+
+Die Version wird automatisch aus der Git-Historie berechnet: `versionName` = `<Basis>.<Anzahl Commits>`
+(z. B. `1.1.3`), `versionCode` = Anzahl Commits. Jeder Commit erzeugt so eine höhere Version, die
+sich über die installierte App drüberinstallieren lässt. Für größere Sprünge die Basisversion
+`baseVersion` in `app/build.gradle.kts` anheben. Die APK heißt `WakeUp-<Version>-debug.apk`,
+die aktuelle Version steht in der App unter Einstellungen → Über.
+
 ## Technik
 
 Kotlin, Jetpack Compose (Material 3), `AlarmManager.setAlarmClock` für exakte Wecker,
