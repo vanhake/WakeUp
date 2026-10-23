@@ -37,6 +37,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import de.vanhake.wakeup.data.SavedBarcode
 import de.vanhake.wakeup.ui.components.BigButton
 import de.vanhake.wakeup.ui.components.BigOutlinedButton
 import de.vanhake.wakeup.ui.theme.Danger
@@ -142,12 +143,12 @@ fun BarcodeScanPane(
 }
 
 @Composable
-fun BarcodeChallenge(expected: String?, onSolved: () -> Unit, onEmergency: () -> Unit) {
+fun BarcodeChallenge(expected: SavedBarcode, onSolved: () -> Unit, onEmergency: () -> Unit) {
     BarcodeScanPane(
-        title = "Scanne deinen Barcode",
-        hint = "Geh zu dem Gegenstand, dessen Code du hinterlegt hast.",
+        title = "Scanne: ${expected.name}",
+        hint = "Steh auf und geh zu dem Gegenstand mit diesem Code.",
         onScanned = { code ->
-            val ok = expected == null || code == expected
+            val ok = code == expected.value
             if (ok) onSolved()
             ok
         },

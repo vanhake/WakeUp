@@ -1,6 +1,5 @@
 package de.vanhake.wakeup
 
-import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -17,23 +16,23 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import de.vanhake.wakeup.alarm.AlarmService
 import de.vanhake.wakeup.data.Alarm
 import de.vanhake.wakeup.data.AlarmRepository
 import de.vanhake.wakeup.ui.AlarmListScreen
 import de.vanhake.wakeup.ui.EditAlarmScreen
+import de.vanhake.wakeup.ui.SettingsScreen
 import de.vanhake.wakeup.ui.challenge.ChallengeHost
 import de.vanhake.wakeup.ui.components.BigOutlinedButton
-import de.vanhake.wakeup.ui.ringing.AlarmActivity
+import de.vanhake.wakeup.ui.ringing.RingingRoute
 import de.vanhake.wakeup.ui.theme.WakeUpTheme
 import org.json.JSONObject
 
@@ -57,25 +56,24 @@ private val AlarmSaver = Saver<Alarm?, String>(
 
 @Composable
 private fun App() {
-    val context = LocalContext.current
     var editing by rememberSaveable(stateSaver = AlarmSaver) { mutableStateOf<Alarm?>(null) }
     var preview by rememberSaveable(stateSaver = AlarmSaver) { mutableStateOf<Alarm?>(null) }
-
-    // While an alarm rings, the app only leads back to the ringing screen.
-    LaunchedEffect(Unit) {
-        AlarmService.ringingAlarmId.collect { id ->
-            if (id != null) {
-                context.startActivity(
-                    Intent(context, AlarmActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                )
-            }
-        }
-    }
+    var settings by rememberSaveable { mutableStateOf(false) }
+    val ringingId by AlarmService.ringingAlarmId.collectAsState()
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val previewAlarm = preview
         val editAlarm = editing
         when {
+            // While an alarm rings, the app shows nothing but the ringing screen.
+            ringingId != null -> {
+                BackHandler { }
+                RingingRoute()
+            }
+            settings -> {
+                BackHandler { settings = false }
+                SettingsScreen(onClose = { settings = false })
+            }
             previewAlarm != null -> {
                 BackHandler { preview = null }
                 ChallengePreview(previewAlarm, onClose = { preview = null })
@@ -92,6 +90,7 @@ private fun App() {
             else -> AlarmListScreen(
                 onEdit = { editing = it },
                 onCreate = { editing = Alarm(id = AlarmRepository.nextId()) },
+                onSettings = { settings = true },
             )
         }
     }

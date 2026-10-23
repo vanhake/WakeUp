@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -25,9 +26,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import de.vanhake.wakeup.alarm.AlarmService
 import de.vanhake.wakeup.data.Alarm
+import de.vanhake.wakeup.data.AlarmRepository
 import de.vanhake.wakeup.data.ChallengeType
 import de.vanhake.wakeup.ui.challenge.ChallengeHost
 import de.vanhake.wakeup.ui.components.BigButton
@@ -35,6 +41,21 @@ import de.vanhake.wakeup.ui.theme.SurfaceHigh
 import kotlinx.coroutines.delay
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+
+/** Ringing screen for the alarm that currently rings; shown by both activities. */
+@Composable
+fun RingingRoute() {
+    val context = LocalContext.current
+    val ringingId by AlarmService.ringingAlarmId.collectAsState()
+    val alarms by AlarmRepository.alarms.collectAsState()
+    val alarm = alarms.firstOrNull { it.id == ringingId } ?: return
+    RingingScreen(
+        alarm = alarm,
+        onSnooze = { AlarmService.snooze(context) },
+        onSolved = { AlarmService.dismiss(context) },
+        onChallengeActive = { AlarmService.setQuiet(context, it) },
+    )
+}
 
 /** Without a touch for this long the challenge is abandoned and the alarm is loud again. */
 private const val INACTIVITY_TIMEOUT_MS = 30_000L
@@ -108,7 +129,8 @@ private fun RingingContent(alarm: Alarm, onSnooze: () -> Unit, onStop: () -> Uni
         Spacer(Modifier.weight(1f))
         Text(
             now.format(DateTimeFormatter.ofPattern("HH:mm")),
-            style = MaterialTheme.typography.displayLarge,
+            fontSize = 88.sp,
+            fontWeight = FontWeight.Light,
         )
         Text(
             alarm.label.ifBlank { "Guten Morgen!" },

@@ -10,9 +10,9 @@ sondern nur durch eine Aufgabe beenden.
 - **Aufgaben zum Ausschalten**
   - **Rechnen** – Leicht / Mittel / Schwer, 1–10 Aufgaben. Falsche Antwort ⇒ neue Aufgabe.
   - **Schütteln** – 10–150 Schüttler.
-  - **Barcode / QR-Code** – vorher einen Code registrieren (z. B. Zahnpasta im Bad), der beim
-    Klingeln gescannt werden muss. Mit Taschenlampe; als Notausgang gibt es 6 schwere
-    Matheaufgaben, falls der Code nicht greifbar ist.
+  - **Barcode / QR-Code** – in den **Einstellungen** (Zahnrad) beliebig viele Codes mit Namen
+    speichern (z. B. „Zahnpasta im Bad“) und pro Wecker einen davon auswählen. Mit Taschenlampe;
+    als Notausgang gibt es 6 schwere Matheaufgaben, falls der Code nicht greifbar ist.
 - **Schlummern begrenzt** – maximale Anzahl (0–10) und Dauer (1–30 Min) pro Wecker. Während ein
   Wecker schlummert, kann er in der App weder ausgeschaltet noch bearbeitet werden.
 - **Kein Schummeln**: keine Ausschalten-Aktion in der Benachrichtigung, Zurück-Taste blockiert,
@@ -34,7 +34,8 @@ Artefakt `WakeUp-debug-apk`). Lokal mit installiertem Android SDK:
 ```
 
 Beim ersten Start die angezeigten Berechtigungen erlauben (Benachrichtigungen, exakte Wecker,
-Vollbild-Anzeige). Für die Barcode-Aufgabe wird die Kamera benötigt.
+Vollbild-Anzeige, „Über anderen Apps einblenden“ – ohne Letzteres öffnet sich der Wecker bei
+entsperrtem Handy nicht von selbst, sondern nur über die Benachrichtigung). Für die Barcode-Aufgabe wird die Kamera benötigt.
 
 ## Technik
 

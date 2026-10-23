@@ -2,11 +2,10 @@ package de.vanhake.wakeup.data
 
 import android.content.Context
 import android.util.Log
-import androidx.core.util.AtomicFile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.io.File
+import org.json.JSONArray
 
 /**
  * Stores alarms as JSON in device-protected storage, so alarms can be restored and
@@ -14,23 +13,38 @@ import java.io.File
  */
 object AlarmRepository {
     private const val TAG = "AlarmRepository"
-    private lateinit var file: AtomicFile
+    private lateinit var file: JsonFile
     private val _alarms = MutableStateFlow<List<Alarm>>(emptyList())
     val alarms: StateFlow<List<Alarm>> = _alarms.asStateFlow()
 
     @Synchronized
     fun init(context: Context) {
         if (::file.isInitialized) return
-        val storage = context.applicationContext.createDeviceProtectedStorageContext()
-        file = AtomicFile(File(storage.filesDir, "alarms.json"))
-        _alarms.value = try {
-            Alarm.listFromJson(String(file.readFully(), Charsets.UTF_8))
-        } catch (e: java.io.FileNotFoundException) {
-            emptyList()
+        BarcodeRepository.init(context)
+        file = JsonFile(context, "alarms.json")
+        val json = file.read() ?: return
+        try {
+            val migrated = migrateInlineBarcodes(json)
+            _alarms.value = Alarm.listFromJson(migrated)
+            if (migrated != json) file.write(migrated)
         } catch (e: Exception) {
-            Log.e(TAG, "Could not read alarms", e)
-            emptyList()
+            Log.e(TAG, "Could not parse alarms", e)
         }
+    }
+
+    /** Version 1.0 stored the scanned code on the alarm itself; move it into the library. */
+    private fun migrateInlineBarcodes(json: String): String {
+        val arr = JSONArray(json)
+        var changed = false
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            if (o.has("barcode") && !o.has("barcodeId")) {
+                o.put("barcodeId", BarcodeRepository.add("", o.getString("barcode")).id)
+                o.remove("barcode")
+                changed = true
+            }
+        }
+        return if (changed) arr.toString() else json
     }
 
     fun get(id: Int): Alarm? = _alarms.value.firstOrNull { it.id == id }
@@ -51,14 +65,7 @@ object AlarmRepository {
 
     private fun save(list: List<Alarm>) {
         val sorted = list.sortedWith(compareBy({ it.hour }, { it.minute }, { it.id }))
-        val out = file.startWrite()
-        try {
-            out.write(Alarm.listToJson(sorted).toByteArray(Charsets.UTF_8))
-            file.finishWrite(out)
-        } catch (e: Exception) {
-            file.failWrite(out)
-            throw e
-        }
+        file.write(Alarm.listToJson(sorted))
         _alarms.value = sorted
     }
 }

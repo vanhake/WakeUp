@@ -8,7 +8,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
-import android.provider.Settings
+import android.provider.Settings as SystemSettings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -29,11 +29,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AlarmAdd
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Snooze
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -73,7 +75,7 @@ import java.time.format.DateTimeFormatter
 private val TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
 @Composable
-fun AlarmListScreen(onEdit: (Alarm) -> Unit, onCreate: () -> Unit) {
+fun AlarmListScreen(onEdit: (Alarm) -> Unit, onCreate: () -> Unit, onSettings: () -> Unit) {
     val context = LocalContext.current
     val alarms by AlarmRepository.alarms.collectAsState()
     var now by remember { mutableStateOf(ZonedDateTime.now()) }
@@ -105,7 +107,7 @@ fun AlarmListScreen(onEdit: (Alarm) -> Unit, onCreate: () -> Unit) {
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item { Header(alarms, now) }
+            item { Header(alarms, now, onSettings) }
             item { PermissionWarnings() }
             if (alarms.isEmpty()) {
                 item { EmptyState(onCreate) }
@@ -134,16 +136,21 @@ fun AlarmListScreen(onEdit: (Alarm) -> Unit, onCreate: () -> Unit) {
 }
 
 @Composable
-private fun Header(alarms: List<Alarm>, now: ZonedDateTime) {
+private fun Header(alarms: List<Alarm>, now: ZonedDateTime, onSettings: () -> Unit) {
     val next = alarms.mapNotNull { nextRing(it, now) }.minOrNull()
-    Column(Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
-        Text("WakeUp", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            if (next == null) "Kein Wecker aktiv" else "Nächster Wecker ${formatCountdown(now, next)}",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    Row(Modifier.padding(start = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("WakeUp", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                if (next == null) "Kein Wecker aktiv" else "Nächster Wecker ${formatCountdown(now, next)}",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        IconButton(onClick = onSettings, modifier = Modifier.size(64.dp)) {
+            Icon(Icons.Filled.Settings, contentDescription = "Einstellungen", modifier = Modifier.size(32.dp))
+        }
     }
 }
 
@@ -276,7 +283,14 @@ private fun buildWarnings(context: Context, requestNotifications: () -> Unit): L
     ) {
         add(
             Warning("Exakte Wecker sind nicht erlaubt – der Wecker könnte zu spät klingeln.", "Öffnen") {
-                context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, packageUri))
+                context.startActivity(Intent(SystemSettings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, packageUri))
+            },
+        )
+    }
+    if (!SystemSettings.canDrawOverlays(context)) {
+        add(
+            Warning("„Über anderen Apps einblenden“ erlauben, damit sich der Wecker von selbst öffnet.", "Öffnen") {
+                context.startActivity(Intent(SystemSettings.ACTION_MANAGE_OVERLAY_PERMISSION, packageUri))
             },
         )
     }
@@ -285,7 +299,7 @@ private fun buildWarnings(context: Context, requestNotifications: () -> Unit): L
     ) {
         add(
             Warning("Vollbild-Anzeige erlauben, damit der Wecker auf dem Sperrbildschirm erscheint.", "Öffnen") {
-                context.startActivity(Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, packageUri))
+                context.startActivity(Intent(SystemSettings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, packageUri))
             },
         )
     }

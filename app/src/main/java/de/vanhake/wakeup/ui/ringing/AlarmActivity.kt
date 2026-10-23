@@ -7,8 +7,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.lifecycle.lifecycleScope
 import de.vanhake.wakeup.alarm.AlarmService
 import de.vanhake.wakeup.data.AlarmRepository
@@ -46,17 +44,7 @@ class AlarmActivity : ComponentActivity() {
 
         setContent {
             WakeUpTheme {
-                val ringingId by AlarmService.ringingAlarmId.collectAsState()
-                val alarms by AlarmRepository.alarms.collectAsState()
-                val alarm = alarms.firstOrNull { it.id == ringingId }
-                if (alarm != null) {
-                    RingingScreen(
-                        alarm = alarm,
-                        onSnooze = { AlarmService.snooze(this) },
-                        onSolved = { AlarmService.dismiss(this) },
-                        onChallengeActive = { AlarmService.setQuiet(this, it) },
-                    )
-                }
+                RingingRoute()
             }
         }
     }

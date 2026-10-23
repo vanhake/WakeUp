@@ -20,7 +20,8 @@ data class Alarm(
     val mathDifficulty: MathDifficulty = MathDifficulty.MEDIUM,
     val mathCount: Int = 3,
     val shakeCount: Int = 30,
-    val barcode: String? = null,
+    /** Id of a [SavedBarcode] from the barcode library. */
+    val barcodeId: Int? = null,
     /** 0 disables snoozing. */
     val maxSnoozes: Int = 2,
     val snoozeMinutes: Int = 5,
@@ -50,7 +51,7 @@ data class Alarm(
         put("mathDifficulty", mathDifficulty.name)
         put("mathCount", mathCount)
         put("shakeCount", shakeCount)
-        barcode?.let { put("barcode", it) }
+        barcodeId?.let { put("barcodeId", it) }
         put("maxSnoozes", maxSnoozes)
         put("snoozeMinutes", snoozeMinutes)
         put("vibrate", vibrate)
@@ -75,7 +76,7 @@ data class Alarm(
                 mathDifficulty = enumOr(o.optString("mathDifficulty"), MathDifficulty.MEDIUM),
                 mathCount = o.optInt("mathCount", 3),
                 shakeCount = o.optInt("shakeCount", 30),
-                barcode = if (o.has("barcode")) o.getString("barcode") else null,
+                barcodeId = if (o.has("barcodeId")) o.getInt("barcodeId") else null,
                 maxSnoozes = o.optInt("maxSnoozes", 2),
                 snoozeMinutes = o.optInt("snoozeMinutes", 5),
                 vibrate = o.optBoolean("vibrate", true),

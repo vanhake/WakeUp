@@ -49,8 +49,6 @@ private val colors = darkColorScheme(
 private val base = Typography()
 
 private val typography = base.copy(
-    displayLarge = base.displayLarge.copy(fontWeight = FontWeight.Light, fontSize = 88.sp),
-    displayMedium = base.displayMedium.copy(fontWeight = FontWeight.Light),
     titleLarge = base.titleLarge.copy(fontWeight = FontWeight.SemiBold),
     titleMedium = base.titleMedium.copy(fontWeight = FontWeight.SemiBold, fontSize = 18.sp),
     bodyLarge = base.bodyLarge.copy(fontSize = 17.sp),

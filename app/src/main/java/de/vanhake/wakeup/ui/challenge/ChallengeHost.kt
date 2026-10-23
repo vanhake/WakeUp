@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import de.vanhake.wakeup.data.Alarm
+import de.vanhake.wakeup.data.BarcodeRepository
 import de.vanhake.wakeup.data.ChallengeType
 import de.vanhake.wakeup.data.MathDifficulty
 
@@ -22,6 +23,7 @@ fun ChallengeHost(alarm: Alarm, onSolved: () -> Unit, onInteraction: () -> Unit)
     val canShake = remember {
         hasAccelerometer(context.getSystemService(SensorManager::class.java))
     }
+    val barcode = remember(alarm.barcodeId) { BarcodeRepository.get(alarm.barcodeId) }
 
     when {
         emergency ->
@@ -30,9 +32,10 @@ fun ChallengeHost(alarm: Alarm, onSolved: () -> Unit, onInteraction: () -> Unit)
             MathChallenge(alarm.mathDifficulty, alarm.mathCount, onSolved)
         alarm.challenge == ChallengeType.SHAKE && canShake ->
             ShakeChallenge(alarm.shakeCount, onSolved, onShake = onInteraction)
-        alarm.challenge == ChallengeType.SHAKE ->
+        alarm.challenge == ChallengeType.BARCODE && barcode != null ->
+            BarcodeChallenge(barcode, onSolved, onEmergency = { emergency = true })
+        // No accelerometer, or the barcode was removed from the library.
+        else ->
             MathChallenge(MathDifficulty.HARD, EMERGENCY_MATH_COUNT, onSolved)
-        alarm.challenge == ChallengeType.BARCODE ->
-            BarcodeChallenge(alarm.barcode, onSolved, onEmergency = { emergency = true })
     }
 }

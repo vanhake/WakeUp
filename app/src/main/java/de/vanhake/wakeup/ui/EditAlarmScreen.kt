@@ -6,7 +6,6 @@ import android.content.Intent
 import android.media.RingtoneManager
 import android.net.Uri
 import android.widget.Toast
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -48,6 +47,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -59,6 +59,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,10 +69,10 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.IntentCompat
 import de.vanhake.wakeup.alarm.AlarmScheduler
@@ -80,9 +81,9 @@ import de.vanhake.wakeup.alarm.WEEKEND_SET
 import de.vanhake.wakeup.alarm.shortDayName
 import de.vanhake.wakeup.data.Alarm
 import de.vanhake.wakeup.data.AlarmRepository
+import de.vanhake.wakeup.data.BarcodeRepository
 import de.vanhake.wakeup.data.ChallengeType
 import de.vanhake.wakeup.data.MathDifficulty
-import de.vanhake.wakeup.ui.challenge.BarcodeScanPane
 import de.vanhake.wakeup.ui.components.BigButton
 import de.vanhake.wakeup.ui.components.BigOutlinedButton
 import de.vanhake.wakeup.ui.components.SectionTitle
@@ -113,23 +114,10 @@ fun EditAlarmScreen(
     }
 
     if (scanning) {
-        BackHandler { scanning = false }
-        Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(top = 32.dp)) {
-            BarcodeScanPane(
-                title = "Barcode registrieren",
-                hint = "Scanne einen Barcode oder QR-Code, der weit weg vom Bett ist – z. B. die Zahnpasta im Bad.",
-                onScanned = { code ->
-                    onChange(currentAlarm.copy(barcode = code))
-                    scanning = false
-                    Toast.makeText(context, "Barcode gespeichert", Toast.LENGTH_SHORT).show()
-                    true
-                },
-                modifier = Modifier.weight(1f),
-                footer = {
-                    BigOutlinedButton(text = "Abbrechen", icon = Icons.Filled.Close, onClick = { scanning = false })
-                },
-            )
-        }
+        AddBarcodeFlow(onDone = { barcode ->
+            scanning = false
+            if (barcode != null) onChange(currentAlarm.copy(barcodeId = barcode.id))
+        })
         return
     }
 
@@ -217,7 +205,9 @@ fun EditAlarmScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ChallengeType.entries.forEach { type ->
                     ChallengeOption(type, selected = alarm.challenge == type, modifier = Modifier.weight(1f)) {
-                        onChange(alarm.copy(challenge = type))
+                        val barcodeId = alarm.barcodeId?.takeIf { BarcodeRepository.get(it) != null }
+                            ?: BarcodeRepository.barcodes.value.firstOrNull()?.id
+                        onChange(alarm.copy(challenge = type, barcodeId = barcodeId))
                     }
                 }
             }
@@ -231,15 +221,19 @@ fun EditAlarmScreen(
                     steps = 13,
                     onValue = { onChange(alarm.copy(shakeCount = (it / 10).roundToInt() * 10)) },
                 )
-                ChallengeType.BARCODE -> BarcodeSettings(alarm) { scanning = true }
+                ChallengeType.BARCODE -> BarcodeSettings(
+                    alarm,
+                    onSelect = { onChange(alarm.copy(barcodeId = it)) },
+                    onAdd = { scanning = true },
+                )
             }
             Spacer(Modifier.height(12.dp))
             BigOutlinedButton(
                 text = "Aufgabe testen",
                 icon = Icons.Filled.PlayArrow,
                 onClick = {
-                    if (alarm.challenge == ChallengeType.BARCODE && alarm.barcode == null) {
-                        Toast.makeText(context, "Bitte zuerst einen Barcode registrieren", Toast.LENGTH_SHORT).show()
+                    if (missingBarcode(alarm)) {
+                        Toast.makeText(context, "Bitte zuerst einen Barcode auswählen", Toast.LENGTH_SHORT).show()
                     } else {
                         onTest(alarm)
                     }
@@ -300,8 +294,8 @@ fun EditAlarmScreen(
 }
 
 private fun save(context: Context, alarm: Alarm, onClose: () -> Unit) {
-    if (alarm.challenge == ChallengeType.BARCODE && alarm.barcode == null) {
-        Toast.makeText(context, "Bitte zuerst einen Barcode registrieren", Toast.LENGTH_SHORT).show()
+    if (missingBarcode(alarm)) {
+        Toast.makeText(context, "Bitte zuerst einen Barcode auswählen", Toast.LENGTH_SHORT).show()
         return
     }
     val saved = alarm.copy(enabled = true, snoozesUsed = 0, snoozedUntil = null)
@@ -408,31 +402,59 @@ private fun MathSettings(alarm: Alarm, onChange: (Alarm) -> Unit) {
     )
 }
 
+private fun missingBarcode(alarm: Alarm): Boolean =
+    alarm.challenge == ChallengeType.BARCODE && BarcodeRepository.get(alarm.barcodeId) == null
+
 @Composable
-private fun BarcodeSettings(alarm: Alarm, onScan: () -> Unit) {
-    Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    ) {
-        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+private fun BarcodeSettings(alarm: Alarm, onSelect: (Int) -> Unit, onAdd: () -> Unit) {
+    val barcodes by BarcodeRepository.barcodes.collectAsState()
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (barcodes.isEmpty()) {
             Text(
-                if (alarm.barcode == null) "Noch kein Barcode registriert" else "Registriert: ${alarm.barcode}",
+                "Noch keine Barcodes gespeichert – scanne jetzt einen.",
                 style = MaterialTheme.typography.bodyLarge,
-                color = if (alarm.barcode == null) Danger else Color.Unspecified,
-            )
-            Text(
-                "Tipp: Wähle einen Code weit weg vom Bett, z. B. im Bad oder in der Küche.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
-            )
-            BigButton(
-                text = if (alarm.barcode == null) "Barcode scannen" else "Anderen Barcode scannen",
-                icon = Icons.Filled.QrCodeScanner,
-                onClick = onScan,
-                height = 60.dp,
+                color = Danger,
             )
         }
+        barcodes.forEach { barcode ->
+            val selected = alarm.barcodeId == barcode.id
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 64.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                    )
+                    .clickable { onSelect(barcode.id) }
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = selected, onClick = { onSelect(barcode.id) })
+                Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+                    Text(barcode.name, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        barcode.value,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        BigOutlinedButton(
+            text = "Neuen Barcode scannen",
+            icon = Icons.Filled.QrCodeScanner,
+            onClick = onAdd,
+            height = 60.dp,
+        )
+        Text(
+            "Alle Barcodes verwaltest du in den Einstellungen (Zahnrad in der Weckerliste).",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
