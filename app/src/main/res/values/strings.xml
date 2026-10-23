@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">WakeUp</string>
+    <string name="channel_ringing">Klingelnder Wecker</string>
+    <string name="channel_snooze">Schlummern</string>
+</resources>
