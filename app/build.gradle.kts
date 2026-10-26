@@ -35,11 +35,24 @@ android {
         versionName = appVersionName
     }
 
+    // Release signing key comes from environment variables (set from GitHub secrets in CI).
+    // Without them the release APK falls back to the debug key so local builds keep working.
+    val releaseKeystore = System.getenv("SIGNING_KEYSTORE_FILE")?.let { file(it) }
+    signingConfigs {
+        if (releaseKeystore != null && releaseKeystore.exists()) {
+            create("release") {
+                storeFile = releaseKeystore
+                storePassword = System.getenv("SIGNING_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("SIGNING_KEY_ALIAS")
+                keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Signed with the debug key so the release APK can be sideloaded directly.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 
