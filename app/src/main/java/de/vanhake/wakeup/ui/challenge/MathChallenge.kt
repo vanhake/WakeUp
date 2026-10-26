@@ -91,6 +91,7 @@ fun MathChallenge(difficulty: MathDifficulty, count: Int, onSolved: () -> Unit) 
             "${problem.text} =",
             fontSize = 40.sp,
             fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground,
             textAlign = TextAlign.Center,
             modifier = Modifier.offset { IntOffset(shake.value.roundToInt(), 0) },
         )
