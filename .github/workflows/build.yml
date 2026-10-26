@@ -8,6 +8,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      # Needed to create the GitHub release and its tag.
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,3 +60,16 @@ jobs:
         with:
           name: WakeUp-${{ steps.version.outputs.name }}-release
           path: app/build/outputs/apk/release/*.apk
+
+      # Every push to main gets its own version (commit count), so publish it
+      # as a release. Only with the private key, never with the debug fallback.
+      - name: Create GitHub release
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && env.SIGNING_KEYSTORE_FILE != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.name }}
+        run: |
+          gh release create "v$VERSION" app/build/outputs/apk/release/*.apk \
+            --target "$GITHUB_SHA" \
+            --title "WakeUp $VERSION" \
+            --generate-notes
