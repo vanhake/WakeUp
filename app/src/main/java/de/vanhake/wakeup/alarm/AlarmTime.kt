@@ -1,7 +1,9 @@
 package de.vanhake.wakeup.alarm
 
+import de.vanhake.wakeup.data.Alarm
 import java.time.DayOfWeek
 import java.time.Duration
+import java.time.Instant
 import java.time.LocalTime
 import java.time.ZonedDateTime
 import java.time.format.TextStyle
@@ -21,6 +23,17 @@ fun nextTrigger(hour: Int, minute: Int, days: Set<DayOfWeek>, now: ZonedDateTime
         if (candidate.isAfter(now)) return candidate
     }
     error("unreachable: a matching day exists within 8 days")
+}
+
+/** Next regular ring time of [alarm]; a ring time already replaced by a smart wake-up is skipped. */
+fun nextRegularRing(alarm: Alarm, now: ZonedDateTime): Long {
+    val target = alarm.smartWakeTarget
+    val base = if (target != null && target >= now.toInstant().toEpochMilli()) {
+        Instant.ofEpochMilli(target).atZone(now.zone)
+    } else {
+        now
+    }
+    return nextTrigger(alarm.hour, alarm.minute, alarm.days, base).toInstant().toEpochMilli()
 }
 
 /** "in 7 Std. 5 Min." style countdown. */

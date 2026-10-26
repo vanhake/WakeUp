@@ -30,9 +30,13 @@ data class Alarm(
     val volume: Float = 1f,
     /** null = system default alarm sound. */
     val ringtoneUri: String? = null,
+    /** Ring up to this many minutes early in a light sleep phase (needs sleep recording); 0 = off. */
+    val smartWakeMinutes: Int = 0,
     // Runtime state of the current wake-up, reset on dismiss.
     val snoozesUsed: Int = 0,
     val snoozedUntil: Long? = null,
+    /** Regular ring time that a smart wake-up already replaced; it is skipped when rescheduling. */
+    val smartWakeTarget: Long? = null,
 ) {
     val isRepeating: Boolean get() = days.isNotEmpty()
     val snoozesLeft: Int get() = (maxSnoozes - snoozesUsed).coerceAtLeast(0)
@@ -57,8 +61,10 @@ data class Alarm(
         put("vibrate", vibrate)
         put("volume", volume.toDouble())
         ringtoneUri?.let { put("ringtoneUri", it) }
+        put("smartWakeMinutes", smartWakeMinutes)
         put("snoozesUsed", snoozesUsed)
         snoozedUntil?.let { put("snoozedUntil", it) }
+        smartWakeTarget?.let { put("smartWakeTarget", it) }
     }
 
     companion object {
@@ -82,8 +88,10 @@ data class Alarm(
                 vibrate = o.optBoolean("vibrate", true),
                 volume = o.optDouble("volume", 1.0).toFloat(),
                 ringtoneUri = if (o.has("ringtoneUri")) o.getString("ringtoneUri") else null,
+                smartWakeMinutes = o.optInt("smartWakeMinutes", 0),
                 snoozesUsed = o.optInt("snoozesUsed", 0),
                 snoozedUntil = if (o.has("snoozedUntil")) o.getLong("snoozedUntil") else null,
+                smartWakeTarget = if (o.has("smartWakeTarget")) o.getLong("smartWakeTarget") else null,
             )
         }
 

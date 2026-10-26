@@ -258,6 +258,9 @@ fun EditAlarmScreen(
                 )
             }
 
+            SectionTitle("Smart Wake")
+            SmartWakeSettings(alarm, onChange)
+
             SectionTitle("Ton")
             RingtoneRow(alarm, onChange)
             LabeledSlider(
@@ -298,7 +301,7 @@ private fun save(context: Context, alarm: Alarm, onClose: () -> Unit) {
         Toast.makeText(context, "Bitte zuerst einen Barcode auswählen", Toast.LENGTH_SHORT).show()
         return
     }
-    val saved = alarm.copy(enabled = true, snoozesUsed = 0, snoozedUntil = null)
+    val saved = alarm.copy(enabled = true, snoozesUsed = 0, snoozedUntil = null, smartWakeTarget = null)
     AlarmRepository.upsert(saved)
     AlarmScheduler.schedule(context, saved)
     toastNextRing(context, saved)
@@ -399,6 +402,33 @@ private fun MathSettings(alarm: Alarm, onChange: (Alarm) -> Unit) {
         range = 1f..10f,
         steps = 8,
         onValue = { onChange(alarm.copy(mathCount = it.roundToInt())) },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SmartWakeSettings(alarm: Alarm, onChange: (Alarm) -> Unit) {
+    val options = listOf(0, 10, 20, 30)
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        options.forEachIndexed { index, minutes ->
+            SegmentedButton(
+                selected = alarm.smartWakeMinutes == minutes,
+                onClick = { onChange(alarm.copy(smartWakeMinutes = minutes)) },
+                shape = SegmentedButtonDefaults.itemShape(index, options.size),
+                modifier = Modifier.height(56.dp),
+            ) { Text(if (minutes == 0) "Aus" else "$minutes Min") }
+        }
+    }
+    Text(
+        if (alarm.smartWakeMinutes == 0) {
+            "Weckt immer genau zur eingestellten Zeit."
+        } else {
+            "Klingelt bis zu ${alarm.smartWakeMinutes} Min früher, wenn die Schlafanalyse eine leichte " +
+                "Schlafphase erkennt (Bewegung). Funktioniert nur, während die Schlafaufzeichnung läuft."
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 6.dp),
     )
 }
 

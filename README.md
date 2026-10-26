@@ -21,6 +21,14 @@ sondern nur durch eine Aufgabe beenden.
   Aufgabe beginnt von vorn.
 - Weckton, Lautstärke (wird beim Klingeln erzwungen) und Vibration pro Wecker.
 - Klingelt auch über dem Sperrbildschirm und nach einem Neustart (auch vor dem Entsperren).
+- **Schlafanalyse** (Mond-Symbol): zeichnet die Nacht über das Mikrofon auf – automatisch
+  (*Aus* / *Bei Wecker* / *Immer*, ab einer Startzeit) oder manuell – und zeigt morgens einen
+  Bericht: Schlafdauer, Einschlafzeit, Wachphasen, Unruhe, Schnarchzeit, Atemaussetzer-Verdacht,
+  Atemfrequenz, Störgeräusche und einen Schlafwert. Hörproben (Schnarchen, Atempausen, laute
+  Geräusche) werden nach 24 Stunden gelöscht. Alles bleibt auf dem Handy; keine medizinische Diagnose.
+  Details: [docs/SCHLAFANALYSE.md](docs/SCHLAFANALYSE.md).
+- **Smart Wake** pro Wecker: klingelt bis zu 10/20/30 Min früher, wenn die Schlafanalyse eine
+  leichte Schlafphase (Bewegung) erkennt.
 - Dunkles, schlichtes UI mit großen, weit auseinanderliegenden Buttons.
 
 ## Bauen & installieren
@@ -35,7 +43,7 @@ Artefakt `WakeUp-debug-apk`). Lokal mit installiertem Android SDK:
 
 Beim ersten Start die angezeigten Berechtigungen erlauben (Benachrichtigungen, exakte Wecker,
 Vollbild-Anzeige, „Über anderen Apps einblenden“ – ohne Letzteres öffnet sich der Wecker bei
-entsperrtem Handy nicht von selbst, sondern nur über die Benachrichtigung). Für die Barcode-Aufgabe wird die Kamera benötigt.
+entsperrtem Handy nicht von selbst, sondern nur über die Benachrichtigung). Für die Barcode-Aufgabe wird die Kamera benötigt, für die Schlafanalyse das Mikrofon.
 
 ## Versionierung
 
@@ -48,5 +56,6 @@ die aktuelle Version steht in der App unter Einstellungen → Über.
 ## Technik
 
 Kotlin, Jetpack Compose (Material 3), `AlarmManager.setAlarmClock` für exakte Wecker,
-Foreground-Service für Ton/Vibration, CameraX + ML Kit (offline) für Barcodes.
+Foreground-Service für Ton/Vibration, CameraX + ML Kit (offline) für Barcodes,
+`AudioRecord` + eigene Signalverarbeitung (FFT, Rhythmus-Erkennung) für die Schlafanalyse.
 Mindestens Android 8.0 (API 26).

@@ -29,6 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AlarmAdd
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Snooze
 import androidx.compose.material.icons.filled.WarningAmber
@@ -65,6 +66,9 @@ import de.vanhake.wakeup.alarm.formatCountdown
 import de.vanhake.wakeup.alarm.formatDays
 import de.vanhake.wakeup.data.Alarm
 import de.vanhake.wakeup.data.AlarmRepository
+import de.vanhake.wakeup.sleep.SleepRepository
+import de.vanhake.wakeup.sleep.SleepTrackingService
+import de.vanhake.wakeup.ui.sleep.formatDuration
 import de.vanhake.wakeup.ui.theme.AccentDim
 import kotlinx.coroutines.delay
 import java.time.Instant
@@ -75,7 +79,13 @@ import java.time.format.DateTimeFormatter
 private val TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
 @Composable
-fun AlarmListScreen(onEdit: (Alarm) -> Unit, onCreate: () -> Unit, onSettings: () -> Unit) {
+fun AlarmListScreen(
+    onEdit: (Alarm) -> Unit,
+    onCreate: () -> Unit,
+    onSettings: () -> Unit,
+    onSleep: () -> Unit,
+    onOpenReport: (Long) -> Unit,
+) {
     val context = LocalContext.current
     val alarms by AlarmRepository.alarms.collectAsState()
     var now by remember { mutableStateOf(ZonedDateTime.now()) }
@@ -107,8 +117,9 @@ fun AlarmListScreen(onEdit: (Alarm) -> Unit, onCreate: () -> Unit, onSettings: (
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item { Header(alarms, now, onSettings) }
+            item { Header(alarms, now, onSettings, onSleep) }
             item { PermissionWarnings() }
+            item { SleepCard(now, onSleep, onOpenReport) }
             if (alarms.isEmpty()) {
                 item { EmptyState(onCreate) }
             }
@@ -136,7 +147,7 @@ fun AlarmListScreen(onEdit: (Alarm) -> Unit, onCreate: () -> Unit, onSettings: (
 }
 
 @Composable
-private fun Header(alarms: List<Alarm>, now: ZonedDateTime, onSettings: () -> Unit) {
+private fun Header(alarms: List<Alarm>, now: ZonedDateTime, onSettings: () -> Unit, onSleep: () -> Unit) {
     val next = alarms.mapNotNull { nextRing(it, now) }.minOrNull()
     Row(Modifier.padding(start = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
@@ -148,8 +159,47 @@ private fun Header(alarms: List<Alarm>, now: ZonedDateTime, onSettings: () -> Un
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        IconButton(onClick = onSleep, modifier = Modifier.size(64.dp)) {
+            Icon(Icons.Filled.Bedtime, contentDescription = "Schlafanalyse", modifier = Modifier.size(32.dp))
+        }
         IconButton(onClick = onSettings, modifier = Modifier.size(64.dp)) {
             Icon(Icons.Filled.Settings, contentDescription = "Einstellungen", modifier = Modifier.size(32.dp))
+        }
+    }
+}
+
+/** Running recording, or last night's result if it is recent. */
+@Composable
+private fun SleepCard(now: ZonedDateTime, onSleep: () -> Unit, onOpenReport: (Long) -> Unit) {
+    val since by SleepTrackingService.recordingSince.collectAsState()
+    val nights by SleepRepository.nights.collectAsState()
+    val recording = since
+    val last = nights.firstOrNull()?.takeIf { now.toInstant().toEpochMilli() - it.end < 18 * 60 * 60 * 1000L }
+    if (recording == null && last == null) return
+    Card(
+        onClick = { if (recording == null && last != null) onOpenReport(last.start) else onSleep() },
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.Bedtime, contentDescription = null)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                if (recording != null) {
+                    Text("Schlafaufzeichnung läuft", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "seit " + TIME_FORMAT.format(Instant.ofEpochMilli(recording).atZone(ZoneId.systemDefault())),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                } else if (last != null) {
+                    Text("Letzte Nacht: ${formatDuration(last.sleepMinutes)}", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Schlafwert ${last.score}" + if (last.snoreMinutes > 0) " · ${last.snoreMinutes} Min. Schnarchen" else "",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
         }
     }
 }
@@ -235,7 +285,8 @@ private fun AlarmCard(alarm: Alarm, now: ZonedDateTime, onClick: () -> Unit, onT
 }
 
 private fun snoozeSummary(alarm: Alarm): String =
-    if (alarm.maxSnoozes == 0) " · ohne Schlummern" else " · ${alarm.maxSnoozes}× ${alarm.snoozeMinutes} Min"
+    (if (alarm.maxSnoozes == 0) " · ohne Schlummern" else " · ${alarm.maxSnoozes}× ${alarm.snoozeMinutes} Min") +
+        if (alarm.smartWakeMinutes > 0) " · Smart Wake" else ""
 
 private data class Warning(val text: String, val action: String, val onClick: () -> Unit)
 

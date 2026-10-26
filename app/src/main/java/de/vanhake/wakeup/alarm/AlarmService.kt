@@ -20,6 +20,7 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import de.vanhake.wakeup.data.Alarm
 import de.vanhake.wakeup.data.AlarmRepository
+import de.vanhake.wakeup.sleep.SleepTrackingService
 import de.vanhake.wakeup.ui.ringing.AlarmActivity
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -69,7 +70,9 @@ class AlarmService : Service() {
         }
 
         Notifications.cancelSnoozed(this, alarm.id)
-        val updated = alarm.copy(snoozedUntil = null)
+        // A smart wake-up rings before the regular time, which stays remembered so it is skipped.
+        val smartTarget = alarm.smartWakeTarget?.takeIf { it > System.currentTimeMillis() }
+        val updated = alarm.copy(snoozedUntil = null, smartWakeTarget = smartTarget)
         AlarmRepository.upsert(updated)
         if (updated.isRepeating) {
             // Make sure tomorrow's alarm is registered even if this one is never dismissed.
@@ -81,6 +84,7 @@ class AlarmService : Service() {
         current = updated
         _ringingAlarmId.value = updated.id
         startRinging(updated)
+        SleepTrackingService.alarmRinging()
 
         try {
             startActivity(
@@ -100,6 +104,7 @@ class AlarmService : Service() {
         AlarmRepository.upsert(updated)
         AlarmScheduler.scheduleAt(this, updated.id, until)
         Notifications.showSnoozed(this, updated, until)
+        SleepTrackingService.alarmSnoozed()
         stopEverything()
     }
 
@@ -113,6 +118,7 @@ class AlarmService : Service() {
         AlarmRepository.upsert(updated)
         AlarmScheduler.schedule(this, updated)
         Notifications.cancelSnoozed(this, updated.id)
+        SleepTrackingService.alarmDismissed()
         stopEverything()
     }
 
