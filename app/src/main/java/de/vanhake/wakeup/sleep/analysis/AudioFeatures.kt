@@ -121,7 +121,10 @@ class BurstDetector {
         private set
 
     private var frameIndex = 0L
-    private var inBurst = false
+
+    /** A sound is currently going on. */
+    var inBurst = false
+        private set
     private var burstStart = 0L
     private var lastActive = 0L
     private var peak = SILENCE_DB

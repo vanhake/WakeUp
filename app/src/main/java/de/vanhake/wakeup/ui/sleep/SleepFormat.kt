@@ -33,6 +33,8 @@ val ClipType.label: String
         ClipType.SNORE -> "Schnarchen"
         ClipType.APNEA -> "Atemaussetzer-Verdacht"
         ClipType.NOISE -> "Lautes Geräusch"
+        ClipType.COUGH -> "Husten"
+        ClipType.SPEECH -> "Sprechen"
     }
 
 private val TIME = DateTimeFormatter.ofPattern("HH:mm")

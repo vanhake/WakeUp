@@ -220,7 +220,7 @@ fun SleepScreen(onClose: () -> Unit, onOpenReport: (Long) -> Unit) {
                 Column(Modifier.weight(1f)) {
                     Text("Hörproben speichern", style = MaterialTheme.typography.bodyLarge)
                     Text(
-                        "Kurze Ausschnitte von Schnarchen, Atemaussetzern und lauten Geräuschen. " +
+                        "Kurze Ausschnitte von Schnarchen, Atemaussetzern, Husten, Sprechen und lauten Geräuschen. " +
                             "Werden nach 24 Stunden automatisch gelöscht.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

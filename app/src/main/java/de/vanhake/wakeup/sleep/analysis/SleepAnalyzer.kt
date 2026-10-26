@@ -19,7 +19,7 @@ data class SleepReport(
     val movements: List<Int>,
     /** Average sound level per minute in dB above the quietest part of the night. */
     val noise: List<Float>,
-    /** Last time the screen went off before falling asleep (or the start). */
+    /** When going to bed: last screen-off or lights-off before falling asleep (or the start). */
     val bedStart: Long,
     val sleepOnset: Long?,
     val wakeUp: Long?,
@@ -40,6 +40,15 @@ data class SleepReport(
     val breathingRate: Float?,
     val disturbances: List<Disturbance>,
     val score: Int,
+    /** Coughs during the sleep period (needs the sound classifier). */
+    val coughs: Int = 0,
+    /** Separate stretches of talking during sleep (needs the sound classifier). */
+    val sleepTalkEpisodes: Int = 0,
+    /** Room light switched off (from the light sensor). */
+    val lightsOff: Long? = null,
+    val classifierUsed: Boolean = false,
+    /** The accelerometer felt movements, i.e. the phone lay on the mattress. */
+    val usedMotion: Boolean = false,
 ) {
     val snorePercent: Int get() = if (sleepMinutes > 0) (snoreMinutes * 100f / sleepMinutes).roundToInt() else 0
 }
@@ -64,12 +73,15 @@ object SleepAnalyzer {
     private const val ONSET_WINDOW = 15
     private const val RESTLESS_RUN_AWAKE = 6
     private const val SNORING_MINUTE_SEC = 10
+    private const val LIT = 5f
+    private const val DARK = 2f
 
     fun analyze(night: NightRecording): SleepReport {
         val start = night.start
         val n = ceil((night.end - start) / MINUTE.toDouble()).toInt().coerceAtLeast(1)
-        val bursts = night.bursts.filterNot { b -> night.ringing.any { (start + b.startMs) in it } }
-        val classification = BurstClassifier.classify(bursts)
+        fun ringing(relMs: Long) = night.ringing.any { (start + relMs) in it }
+        val bursts = night.bursts.filterNot { ringing(it.startMs) }
+        val classification = BurstClassifier.classify(bursts, night.labels.filterNot { ringing(it.startMs) })
 
         val snoreMs = LongArray(n)
         val moveCount = IntArray(n)
@@ -79,20 +91,30 @@ object SleepAnalyzer {
             if (m !in 0 until n) continue
             when (classification.typeOf(b)) {
                 SoundType.SNORE -> snoreMs[m] += b.durationMs.toLong()
-                SoundType.MOVEMENT -> {
+                // Coughing and talking are restless too.
+                SoundType.MOVEMENT, SoundType.COUGH, SoundType.SPEECH -> {
                     moveCount[m]++
                     moveMs[m] += b.durationMs.toLong()
                 }
                 else -> Unit
             }
         }
+        for (t in night.motion) {
+            val m = (t / MINUTE).toInt()
+            if (m in 0 until n && !ringing(t)) moveCount[m]++
+        }
         val snoreSec = IntArray(n) { (snoreMs[it] / 1000).toInt().coerceAtMost(60) }
 
-        // Minute-level state: screen on = awake, lots of movement = restless.
+        // Lights still on in the evening = awake (morning daylight in the second half does not count).
+        val lightsOff = lightsOff(night, n / 2)
+        val lightsOffMinute = lightsOff?.let { ((it - start) / MINUTE).toInt() } ?: 0
+
+        // Minute-level state: screen or light on = awake, lots of movement = restless.
         val states = Array(n) { m ->
             val snoring = snoreSec[m] >= SNORING_MINUTE_SEC
             when {
                 screenOnDuring(night, start + m * MINUTE, start + (m + 1) * MINUTE) -> RestState.AWAKE
+                m < lightsOffMinute && (night.light.getOrNull(m) ?: 0f) >= LIT -> RestState.AWAKE
                 !snoring && (moveCount[m] >= 2 || moveMs[m] >= 2_000) -> RestState.RESTLESS
                 else -> RestState.CALM
             }
@@ -136,7 +158,10 @@ object SleepAnalyzer {
         val onsetTime = onsetMinute?.let { start + it * MINUTE }
         val wakeTime = if (onsetMinute != null) start + wakeMinute * MINUTE else null
         val bedStart = onsetTime?.let { onset ->
-            night.screen.filter { !it.on && it.timeMs <= onset }.maxOfOrNull { it.timeMs }
+            listOfNotNull(
+                night.screen.filter { !it.on && it.timeMs <= onset }.maxOfOrNull { it.timeMs },
+                lightsOff?.takeIf { it <= onset },
+            ).maxOrNull()
         }?.coerceAtLeast(start) ?: start
         val timeInBed = (((wakeTime ?: night.end) - bedStart) / MINUTE).toInt().coerceAtLeast(0)
         val latency = onsetTime?.let { ((it - bedStart) / MINUTE).toInt().coerceAtLeast(0) }
@@ -175,6 +200,16 @@ object SleepAnalyzer {
 
         val score = score(sleepMinutes, efficiency, restlessMinutes, awakenings, latency)
 
+        fun inSleepRange(relMs: Long) = (relMs / MINUTE).toInt() in sleepRange
+        val coughs = bursts.count { classification.typeOf(it) == SoundType.COUGH && inSleepRange(it.startMs) }
+        var talkEpisodes = 0
+        var lastTalk: Long? = null
+        for (b in bursts.sortedBy { it.startMs }) {
+            if (classification.typeOf(b) != SoundType.SPEECH || !inSleepRange(b.startMs)) continue
+            if (lastTalk == null || b.startMs - lastTalk > 60_000) talkEpisodes++
+            lastTalk = b.endMs
+        }
+
         return SleepReport(
             start = start,
             end = night.end,
@@ -199,6 +234,11 @@ object SleepAnalyzer {
             breathingRate = breathingRate,
             disturbances = disturbances,
             score = score,
+            coughs = coughs,
+            sleepTalkEpisodes = talkEpisodes,
+            lightsOff = lightsOff,
+            classifierUsed = night.classifierUsed,
+            usedMotion = night.motion.isNotEmpty(),
         )
     }
 
@@ -216,6 +256,17 @@ object SleepAnalyzer {
         val wake = (1f - awakenings / 6f).coerceIn(0f, 1f)
         val lat = latency?.let { if (it <= 20) 1f else (1f - (it - 20) / 40f).coerceIn(0f, 1f) } ?: 1f
         return (100 * (0.40f * duration + 0.20f * eff + 0.15f * rest + 0.15f * wake + 0.10f * lat)).roundToInt()
+    }
+
+    /** Last switch from a lit room to darkness before minute [before]. */
+    private fun lightsOff(night: NightRecording, before: Int): Long? {
+        var result: Long? = null
+        for (m in 1 until minOf(before + 1, night.light.size)) {
+            val prev = night.light[m - 1] ?: continue
+            val cur = night.light[m] ?: continue
+            if (prev >= LIT && cur < DARK) result = night.start + m * MINUTE
+        }
+        return result
     }
 
     private fun screenOnDuring(night: NightRecording, from: Long, to: Long): Boolean {

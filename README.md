@@ -24,8 +24,10 @@ sondern nur durch eine Aufgabe beenden.
 - **Schlafanalyse** (Mond-Symbol): zeichnet die Nacht über das Mikrofon auf – automatisch
   (*Aus* / *Bei Wecker* / *Immer*, ab einer Startzeit) oder manuell – und zeigt morgens einen
   Bericht: Schlafdauer, Einschlafzeit, Wachphasen, Unruhe, Schnarchzeit, Atemaussetzer-Verdacht,
-  Atemfrequenz, Störgeräusche und einen Schlafwert. Hörproben (Schnarchen, Atempausen, laute
-  Geräusche) werden nach 24 Stunden gelöscht. Alles bleibt auf dem Handy; keine medizinische Diagnose.
+  Atemfrequenz, Husten, Sprechen im Schlaf, Störgeräusche, „Licht aus“ und einen Schlafwert.
+  Geräusche erkennt die App mit Rhythmus-Analyse und dem KI-Modell YAMNet (offline); liegt das
+  Handy auf der Matratze, hilft der Bewegungssensor. Hörproben werden nach 24 Stunden gelöscht.
+  Alles bleibt auf dem Handy; keine medizinische Diagnose.
   Details: [docs/SCHLAFANALYSE.md](docs/SCHLAFANALYSE.md).
 - **Smart Wake** pro Wecker: klingelt bis zu 10/20/30 Min früher, wenn die Schlafanalyse eine
   leichte Schlafphase (Bewegung) erkennt.
@@ -57,5 +59,7 @@ die aktuelle Version steht in der App unter Einstellungen → Über.
 
 Kotlin, Jetpack Compose (Material 3), `AlarmManager.setAlarmClock` für exakte Wecker,
 Foreground-Service für Ton/Vibration, CameraX + ML Kit (offline) für Barcodes,
-`AudioRecord` + eigene Signalverarbeitung (FFT, Rhythmus-Erkennung) für die Schlafanalyse.
+`AudioRecord` + eigene Signalverarbeitung (FFT, Rhythmus-Erkennung) und TensorFlow Lite mit
+[YAMNet](https://github.com/tensorflow/models/tree/master/research/audioset/yamnet) (Apache 2.0)
+für die Schlafanalyse.
 Mindestens Android 8.0 (API 26).

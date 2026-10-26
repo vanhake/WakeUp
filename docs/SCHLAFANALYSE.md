@@ -207,6 +207,20 @@ Umgesetzt (Phase 1 + Teile von 2 und 3):
 - Morgenbericht mit Zeitleiste, Lautstärkeverlauf, Hörproben zum Abspielen; Verlauf der letzten Nächte.
 - Absicherung: Zwischenstand alle 10 Min., nach einem Absturz wird die Nacht gekürzt gespeichert.
 
-Noch offen: YAMNet-Klassifikation (Husten, Sprechen, bessere Schnarch-Erkennung),
-Lichtsensor, Matratzen-Modus mit Beschleunigungssensor, Sonar. Die Schwellen der Heuristik
-müssen mit echten Nächten nachjustiert werden.
+Zweiter Schritt (umgesetzt):
+
+- **KI-Geräuscherkennung mit YAMNet** (Google, AudioSet, 521 Klassen, Apache-2.0, TensorFlow
+  Lite, offline, 4 MB in `assets/`). Läuft nur auf ~1-s-Fenstern, in denen etwas zu hören war.
+  Erkennt Schnarchen, Atmen, Luftschnappen, Husten, Sprechen und Musik/TV. Die Labels haben
+  Vorrang vor der Heuristik: Husten und Sprechen werden gezählt (und als unruhig gewertet),
+  Schnarchen ohne klaren Rhythmus wird erkannt, Sprache/TV mit Rhythmus gilt nicht mehr als
+  Atmung, Luftschnappen markiert Atemaussetzer. Ohne Modell läuft die Heuristik wie bisher.
+- Hörproben zusätzlich für **Husten** und **Sprechen im Schlaf**.
+- **Lichtsensor**: „Licht aus“ als Zubettgehzeit; Minuten mit Licht am Abend gelten als wach.
+- **Bewegungssensor**: Liegt das Handy auf der Matratze, zählen Erschütterungen als Bewegung
+  (auch für Smart Wake). Auf dem Nachttisch misst er nichts und stört nicht – keine Einstellung nötig.
+
+Bewusst weggelassen: **Sonar** (Ultraschall über den Lautsprecher die ganze Nacht). Es hängt
+stark vom Handy ab, manche Geräte filtern Ultraschall, Kinder und Haustiere können ihn hören,
+und Lautsprecher plus Mikrofon gleichzeitig kosten deutlich Akku. Die Schwellen der Heuristik
+müssen weiterhin mit echten Nächten nachjustiert werden.
