@@ -1,5 +1,6 @@
 package de.vanhake.wakeup
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -16,6 +17,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,9 +33,12 @@ import de.vanhake.wakeup.ui.AlarmListScreen
 import de.vanhake.wakeup.ui.EditAlarmScreen
 import de.vanhake.wakeup.ui.SettingsScreen
 import de.vanhake.wakeup.ui.challenge.ChallengeHost
+import de.vanhake.wakeup.ui.sleep.SleepReportScreen
+import de.vanhake.wakeup.ui.sleep.SleepScreen
 import de.vanhake.wakeup.ui.components.BigOutlinedButton
 import de.vanhake.wakeup.ui.ringing.RingingRoute
 import de.vanhake.wakeup.ui.theme.WakeUpTheme
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
@@ -41,11 +46,30 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         AlarmRepository.init(this)
+        handleIntent(intent)
         setContent {
             WakeUpTheme {
                 App()
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        val report = intent?.getLongExtra(EXTRA_SLEEP_REPORT, -1L) ?: -1L
+        if (report > 0) openReport.value = report
+        intent?.removeExtra(EXTRA_SLEEP_REPORT)
+    }
+
+    companion object {
+        const val EXTRA_SLEEP_REPORT = "sleep_report"
+
+        /** Sleep report to open, set when the app is opened from the report notification. */
+        val openReport = MutableStateFlow<Long?>(null)
     }
 }
 
@@ -59,7 +83,16 @@ private fun App() {
     var editing by rememberSaveable(stateSaver = AlarmSaver) { mutableStateOf<Alarm?>(null) }
     var preview by rememberSaveable(stateSaver = AlarmSaver) { mutableStateOf<Alarm?>(null) }
     var settings by rememberSaveable { mutableStateOf(false) }
+    var sleep by rememberSaveable { mutableStateOf(false) }
+    var report by rememberSaveable { mutableStateOf<Long?>(null) }
     val ringingId by AlarmService.ringingAlarmId.collectAsState()
+    val requestedReport by MainActivity.openReport.collectAsState()
+    LaunchedEffect(requestedReport) {
+        requestedReport?.let {
+            report = it
+            MainActivity.openReport.value = null
+        }
+    }
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val previewAlarm = preview
@@ -69,6 +102,14 @@ private fun App() {
             ringingId != null -> {
                 BackHandler { }
                 RingingRoute()
+            }
+            report != null -> {
+                BackHandler { report = null }
+                SleepReportScreen(start = report!!, onClose = { report = null })
+            }
+            sleep -> {
+                BackHandler { sleep = false }
+                SleepScreen(onClose = { sleep = false }, onOpenReport = { report = it })
             }
             settings -> {
                 BackHandler { settings = false }
@@ -91,6 +132,8 @@ private fun App() {
                 onEdit = { editing = it },
                 onCreate = { editing = Alarm(id = AlarmRepository.nextId()) },
                 onSettings = { settings = true },
+                onSleep = { sleep = true },
+                onOpenReport = { report = it },
             )
         }
     }

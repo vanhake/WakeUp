@@ -28,7 +28,7 @@ object AlarmScheduler {
     }
 
     fun nextRegularTrigger(alarm: Alarm, now: ZonedDateTime = ZonedDateTime.now()): Long =
-        nextTrigger(alarm.hour, alarm.minute, alarm.days, now).toInstant().toEpochMilli()
+        nextRegularRing(alarm, now)
 
     fun scheduleAt(context: Context, alarmId: Int, triggerAtMillis: Long) {
         val am = context.getSystemService(AlarmManager::class.java)

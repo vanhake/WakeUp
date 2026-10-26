@@ -22,6 +22,8 @@ class JsonFile(context: Context, name: String) {
         null
     }
 
+    fun delete() = file.delete()
+
     fun write(json: String) {
         val out = file.startWrite()
         try {

@@ -182,10 +182,31 @@ data class SleepEvent(val type: EventType, val start: Long, val durationMs: Long
   Trefferquote prüfen; Schwellen anpassen.
 - Wer eine Smartwatch hat: Vergleich der Schlafzeiten/Wachphasen mit deren Daten.
 
-## 6. Offene Entscheidungen
-1. Soll die Aufzeichnung an einen Wecker gekoppelt werden (Start-Hinweis abends vor einem
-   aktiven Wecker) oder komplett unabhängig sein?
-2. Hörproben speichern: standardmäßig aus (empfohlen) oder an?
-3. Health Connect früh einplanen (falls eine Smartwatch genutzt wird) oder erst ganz am Ende?
-4. Smart Wake gewünscht? Es verändert die Weckzeit – passt zum „strengen“ Wecker-Konzept nur,
-   wenn es pro Wecker abschaltbar ist.
+## 6. Entscheidungen
+
+1. **Aufzeichnung:** drei Optionen – *Aus*, *Bei Wecker* (nur wenn in den nächsten 16 Std. ein
+   Wecker klingelt), *Immer*. Start zu einer einstellbaren Uhrzeit, Ende mit dem Wecker bzw.
+   ohne Wecker zu einer einstellbaren Endzeit.
+2. **Hörproben:** standardmäßig **an**, werden nach **24 Stunden** automatisch gelöscht.
+3. **Keine Smartwatch** → Health Connect entfällt vorerst.
+4. **Smart Wake:** pro Wecker wählbar (Aus / 10 / 20 / 30 Min).
+
+## 7. Umsetzungsstand
+
+Umgesetzt (Phase 1 + Teile von 2 und 3):
+
+- Automatischer Start zur Startzeit über einen kurzen Bildschirm „Schlafaufzeichnung läuft“
+  (Android lässt das Mikrofon nur aus dem Vordergrund starten), dort „Heute nicht aufzeichnen“.
+  Ohne „Über anderen Apps einblenden“ kommt stattdessen eine Benachrichtigung zum Antippen.
+- Manueller Start/Stopp im Bildschirm „Schlafanalyse“ (Mond-Symbol in der Weckerliste).
+- Analyse ohne KI-Modell, rein heuristisch (`sleep/analysis`): Grundrauschen, Geräusch-Bursts,
+  Rhythmus-Erkennung → Schnarchen / Atmen / Bewegung / Lärm, Atemaussetzer-Verdacht
+  (Pause ≥ 10 s zwischen regelmäßigem Atmen, Luftschnappen), Atemfrequenz, ruhig/unruhig/wach
+  pro Minute, Einschlafzeit, Wachphasen, Effizienz, Schlafwert, Störgeräusche.
+- Bildschirm an/aus als Wach-Signal; Weckerklingeln wird aus der Analyse ausgeblendet.
+- Morgenbericht mit Zeitleiste, Lautstärkeverlauf, Hörproben zum Abspielen; Verlauf der letzten Nächte.
+- Absicherung: Zwischenstand alle 10 Min., nach einem Absturz wird die Nacht gekürzt gespeichert.
+
+Noch offen: YAMNet-Klassifikation (Husten, Sprechen, bessere Schnarch-Erkennung),
+Lichtsensor, Matratzen-Modus mit Beschleunigungssensor, Sonar. Die Schwellen der Heuristik
+müssen mit echten Nächten nachjustiert werden.
