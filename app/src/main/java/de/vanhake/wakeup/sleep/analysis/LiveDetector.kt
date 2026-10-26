@@ -22,6 +22,20 @@ class LiveDetector(private val clipsEnabled: Boolean) {
         return request
     }
 
+    /** Keeps one sample of coughing and of talking in the sleep every 20 minutes at most. */
+    fun onLabel(window: LabelWindow): ClipRequest? {
+        val type = when (window.label) {
+            SoundLabel.COUGH -> ClipType.COUGH
+            SoundLabel.SPEECH -> ClipType.SPEECH
+            else -> return null
+        }
+        if (!clipsEnabled || clips >= MAX_CLIPS) return null
+        if (lastClip[type]?.let { window.startMs - it < 20 * 60_000L } == true) return null
+        clips++
+        lastClip[type] = window.startMs
+        return ClipRequest(type, window.startMs - 3_000, window.endMs + 3_000)
+    }
+
     /** Movement sounds since [fromMs] (relative to the recording start). */
     fun movementsSince(fromMs: Long): Int {
         val window = recent.toList()

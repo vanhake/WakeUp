@@ -9,6 +9,10 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
@@ -28,12 +32,15 @@ import de.vanhake.wakeup.sleep.analysis.ClipRequest
 import de.vanhake.wakeup.sleep.analysis.FRAME_MS
 import de.vanhake.wakeup.sleep.analysis.FRAME_SIZE
 import de.vanhake.wakeup.sleep.analysis.FrameAnalyzer
+import de.vanhake.wakeup.sleep.analysis.LabelWindow
 import de.vanhake.wakeup.sleep.analysis.LiveDetector
 import de.vanhake.wakeup.sleep.analysis.MinuteLevel
 import de.vanhake.wakeup.sleep.analysis.NightRecording
 import de.vanhake.wakeup.sleep.analysis.SAMPLE_RATE
 import de.vanhake.wakeup.sleep.analysis.ScreenEvent
 import de.vanhake.wakeup.sleep.analysis.SleepClip
+import de.vanhake.wakeup.sleep.analysis.YAMNET_WINDOW
+import de.vanhake.wakeup.sleep.analysis.labelFromScores
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,6 +48,7 @@ import java.io.File
 import java.time.ZonedDateTime
 import kotlin.math.log10
 import kotlin.math.max
+import kotlin.math.sqrt
 
 /**
  * Records the night with the microphone. Audio is analysed on the fly and thrown away;
@@ -56,6 +64,10 @@ class SleepTrackingService : Service() {
     private var alarmDismissAt: Long? = null
     private var snoozes = 0
     private var smartWake = false
+    private val motion = mutableListOf<Long>()
+    @Volatile private var lux: Float? = null
+    private var gravity: FloatArray? = null
+    private var lastMotion = 0L
 
     @Volatile private var stopRequested = false
     @Volatile private var discard = false
@@ -69,6 +81,36 @@ class SleepTrackingService : Service() {
         override fun onReceive(context: Context, intent: Intent) {
             val on = intent.action == Intent.ACTION_SCREEN_ON
             synchronized(lock) { screen.add(ScreenEvent(System.currentTimeMillis(), on)) }
+        }
+    }
+
+    /**
+     * Light: brightness for "lights off". Accelerometer: if the phone lies on the mattress,
+     * turning over shakes it; on the nightstand it feels nothing.
+     */
+    private val sensorListener = object : SensorEventListener {
+        override fun onSensorChanged(event: SensorEvent) {
+            when (event.sensor.type) {
+                Sensor.TYPE_LIGHT -> lux = event.values[0]
+                Sensor.TYPE_ACCELEROMETER -> onAcceleration(event.values)
+            }
+        }
+
+        override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) = Unit
+    }
+
+    private fun onAcceleration(values: FloatArray) {
+        val g = gravity ?: values.copyOf().also { gravity = it }
+        var dynamic = 0f
+        for (i in 0..2) {
+            g[i] = 0.9f * g[i] + 0.1f * values[i]
+            val d = values[i] - g[i]
+            dynamic += d * d
+        }
+        val now = System.currentTimeMillis()
+        if (sqrt(dynamic) > MOTION_THRESHOLD && now - lastMotion > 2_000) {
+            lastMotion = now
+            synchronized(lock) { motion.add(now - start) }
         }
     }
 
@@ -107,6 +149,11 @@ class SleepTrackingService : Service() {
             },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
+        getSystemService(SensorManager::class.java)?.let { sm ->
+            listOf(Sensor.TYPE_LIGHT, Sensor.TYPE_ACCELEROMETER).forEach { type ->
+                sm.getDefaultSensor(type)?.let { sm.registerListener(sensorListener, it, SensorManager.SENSOR_DELAY_NORMAL) }
+            }
+        }
         wakeLock = getSystemService(PowerManager::class.java)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "WakeUp:sleep")
             .apply { acquire(MAX_NIGHT.toMillis() + 60 * 60 * 1000L) }
@@ -159,6 +206,13 @@ class SleepTrackingService : Service() {
         val bursts = ArrayList<Burst>(8192)
         val minutes = ArrayList<MinuteLevel>(600)
         val clips = mutableListOf<SleepClip>()
+        val labels = ArrayList<LabelWindow>(4096)
+        val light = ArrayList<Float?>(600)
+        val classifier = YamnetClassifier.create(this)
+        val window = FloatArray(YAMNET_WINDOW)
+        var windowFill = 0
+        var windowStart = 0L
+        var windowActive = 0
         val pendingClips = mutableListOf<ClipRequest>()
         val ring = ShortArray(SAMPLE_RATE * RING_SECONDS)
         var totalSamples = 0L
@@ -201,13 +255,40 @@ class SleepTrackingService : Service() {
                     minuteFrames++
                     if (minuteFrames == FRAMES_PER_MINUTE) {
                         minutes.add(MinuteLevel((10 * log10(minutePower / minuteFrames)).toFloat(), minuteMax, detector.floorDb))
+                        light.add(lux)
                         minutePower = 0.0
                         minuteMax = -100f
                         minuteFrames = 0
                     }
-                    val burst = detector.add(frame) ?: continue
-                    bursts.add(burst)
-                    if (!isRinging) live.onBurst(burst)?.let(pendingClips::add)
+                    val burst = detector.add(frame)
+                    if (detector.inBurst || burst != null) windowActive++
+                    if (burst != null) {
+                        bursts.add(burst)
+                        if (!isRinging) live.onBurst(burst)?.let(pendingClips::add)
+                    }
+                }
+
+                // Sound classifier on ~1-s windows, only when something could be heard.
+                if (classifier != null) {
+                    var i = 0
+                    while (i < read) {
+                        if (windowFill == 0) windowStart = (totalSamples - read + i) * 1000 / SAMPLE_RATE
+                        val n = minOf(read - i, YAMNET_WINDOW - windowFill)
+                        for (k in 0 until n) window[windowFill + k] = buffer[i + k] / 32768f
+                        windowFill += n
+                        i += n
+                        if (windowFill == YAMNET_WINDOW) {
+                            if (windowActive >= 3 && !isRinging) {
+                                labelFromScores(classifier.classify(window))?.let { (label, score) ->
+                                    val labelled = LabelWindow(windowStart, label, score)
+                                    labels.add(labelled)
+                                    live.onLabel(labelled)?.let(pendingClips::add)
+                                }
+                            }
+                            windowFill = 0
+                            windowActive = 0
+                        }
+                    }
                 }
 
                 // Cut samples once the audio after the event has arrived.
@@ -224,7 +305,7 @@ class SleepTrackingService : Service() {
                     if (wall >= deadline) stopRequested = true
                     if (wall - lastCheckpoint >= CHECKPOINT_MS) {
                         lastCheckpoint = wall
-                        SleepRepository.writeCheckpoint(snapshot(wall, bursts, minutes, clips))
+                        SleepRepository.writeCheckpoint(snapshot(wall, bursts, minutes, clips, labels, light, classifier != null))
                     }
                 }
             }
@@ -236,6 +317,7 @@ class SleepTrackingService : Service() {
             } catch (_: IllegalStateException) {
             }
             record.release()
+            classifier?.close()
         }
 
         detector.flush()?.let(bursts::add)
@@ -243,7 +325,9 @@ class SleepTrackingService : Service() {
         if (discard) {
             clips.forEach { SleepRepository.clipFile(it.file).delete() }
         } else {
-            val summary = SleepRepository.saveNight(snapshot(end, bursts, minutes, clips).copy(interrupted = false))
+            val summary = SleepRepository.saveNight(
+                snapshot(end, bursts, minutes, clips, labels, light, classifier != null).copy(interrupted = false),
+            )
             if (summary != null) SleepNotifications.showReport(this, summary)
         }
         SleepRepository.clearCheckpoint()
@@ -258,7 +342,7 @@ class SleepTrackingService : Service() {
             try {
                 val rec = AudioRecord(
                     source, SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
-                    max(minBuffer, SAMPLE_RATE * 2),
+                    max(minBuffer, SAMPLE_RATE * 4),
                 )
                 if (rec.state == AudioRecord.STATE_INITIALIZED) return rec
                 rec.release()
@@ -283,7 +367,8 @@ class SleepTrackingService : Service() {
             val before = target - wall
             if (before < 60_000 || before > alarm.smartWakeMinutes * 60_000L || target in done) continue
             val screenOn = synchronized(lock) { screen.lastOrNull()?.on == true }
-            if (!screenOn && live.movementsSince(nowMs - 3 * 60_000L) < 2) continue
+            val felt = synchronized(lock) { motion.count { it >= wall - start - 3 * 60_000L } }
+            if (!screenOn && live.movementsSince(nowMs - 3 * 60_000L) + felt < 2) continue
             done.add(target)
             synchronized(lock) { smartWake = true }
             Log.i(TAG, "Smart wake-up for alarm ${alarm.id}, ${before / 60_000} min early")
@@ -316,7 +401,15 @@ class SleepTrackingService : Service() {
         }
     }
 
-    private fun snapshot(end: Long, bursts: List<Burst>, minutes: List<MinuteLevel>, clips: List<SleepClip>): NightRecording =
+    private fun snapshot(
+        end: Long,
+        bursts: List<Burst>,
+        minutes: List<MinuteLevel>,
+        clips: List<SleepClip>,
+        labels: List<LabelWindow>,
+        light: List<Float?>,
+        classifierUsed: Boolean,
+    ): NightRecording =
         synchronized(lock) {
             NightRecording(
                 start = start,
@@ -331,12 +424,17 @@ class SleepTrackingService : Service() {
                 ringing = ringing.toList() + listOfNotNull(ringingSince?.let { it..end }),
                 clips = clips.toList(),
                 interrupted = true,
+                labels = labels.toList(),
+                classifierUsed = classifierUsed,
+                light = if (light.all { it == null }) emptyList() else light.toList(),
+                motion = motion.toList(),
             )
         }
 
     private fun shutDown() {
         if (instance === this) instance = null
         _recordingSince.value = null
+        getSystemService(SensorManager::class.java)?.unregisterListener(sensorListener)
         try {
             unregisterReceiver(screenReceiver)
         } catch (_: IllegalArgumentException) {
@@ -363,6 +461,9 @@ class SleepTrackingService : Service() {
         private const val FRAMES_PER_MINUTE = 60_000 / FRAME_MS
         private const val FRAMES_PER_10S = 10_000 / FRAME_MS
         private const val CHECKPOINT_MS = 10 * 60 * 1000L
+
+        /** m/s² of acceleration beyond gravity that counts as a movement of the mattress. */
+        private const val MOTION_THRESHOLD = 0.15f
 
         private var instance: SleepTrackingService? = null
         private val _recordingSince = MutableStateFlow<Long?>(null)

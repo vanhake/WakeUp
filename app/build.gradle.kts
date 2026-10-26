@@ -78,6 +78,8 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:$cameraX")
     implementation("androidx.camera:camera-view:$cameraX")
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
+    // Offline sound classifier (YAMNet model in assets/) for the sleep analysis.
+    implementation("org.tensorflow:tensorflow-lite:2.16.1")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")

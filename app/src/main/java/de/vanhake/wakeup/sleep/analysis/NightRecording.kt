@@ -10,7 +10,7 @@ data class MinuteLevel(val avgDb: Float, val maxDb: Float, val floorDb: Float)
 /** Screen switched on/off at [timeMs] (epoch millis). */
 data class ScreenEvent(val timeMs: Long, val on: Boolean)
 
-enum class ClipType { SNORE, APNEA, NOISE }
+enum class ClipType { SNORE, APNEA, NOISE, COUGH, SPEECH }
 
 /** A short audio sample stored next to the night; deleted after 24 hours. */
 data class SleepClip(val type: ClipType, val timeMs: Long, val file: String, val durationMs: Int)
@@ -34,6 +34,13 @@ data class NightRecording(
     val clips: List<SleepClip> = emptyList(),
     /** The app was stopped during the night; data ends at [end]. */
     val interrupted: Boolean = false,
+    /** YAMNet results for windows with sound; empty if the classifier was not available. */
+    val labels: List<LabelWindow> = emptyList(),
+    val classifierUsed: Boolean = false,
+    /** Brightness per minute in lux, null where the phone has no light sensor. */
+    val light: List<Float?> = emptyList(),
+    /** Movements felt by the accelerometer (phone on the mattress), ms relative to [start]. */
+    val motion: List<Long> = emptyList(),
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("version", 1)
@@ -70,6 +77,16 @@ data class NightRecording(
                 .put("duration", it.durationMs)
         }))
         put("interrupted", interrupted)
+        put("labels", JSONArray().also { arr ->
+            labels.forEach { l ->
+                arr.put(l.startMs)
+                arr.put(l.label.ordinal)
+                arr.put((l.score * 100).roundToInt())
+            }
+        })
+        put("classifierUsed", classifierUsed)
+        put("light", JSONArray(light.map { it?.let { lux -> (lux * 10).roundToInt() } ?: -1 }))
+        put("motion", JSONArray(motion))
     }
 
     companion object {
@@ -107,6 +124,15 @@ data class NightRecording(
                     ?: return@mapNotNull null
                 SleepClip(type, e.getLong("time"), e.getString("file"), e.getInt("duration"))
             }
+            val l = o.optJSONArray("labels") ?: JSONArray()
+            val labels = (0 until l.length() / 3).mapNotNull { i ->
+                val label = SoundLabel.entries.getOrNull(l.getInt(i * 3 + 1)) ?: return@mapNotNull null
+                LabelWindow(l.getLong(i * 3), label, l.getInt(i * 3 + 2) / 100f)
+            }
+            val li = o.optJSONArray("light") ?: JSONArray()
+            val light = (0 until li.length()).map { li.getInt(it).takeIf { v -> v >= 0 }?.let { v -> v / 10f } }
+            val mo = o.optJSONArray("motion") ?: JSONArray()
+            val motion = (0 until mo.length()).map { mo.getLong(it) }
             return NightRecording(
                 start = o.getLong("start"),
                 end = o.getLong("end"),
@@ -120,6 +146,10 @@ data class NightRecording(
                 ringing = ringing,
                 clips = clips,
                 interrupted = o.optBoolean("interrupted", false),
+                labels = labels,
+                classifierUsed = o.optBoolean("classifierUsed", false),
+                light = light,
+                motion = motion,
             )
         }
     }

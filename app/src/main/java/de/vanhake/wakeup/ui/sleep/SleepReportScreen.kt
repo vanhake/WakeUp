@@ -155,7 +155,8 @@ private fun ReportContent(night: NightRecording, report: SleepReport, modifier: 
         SectionTitle("Schlaf")
         StatGrid(
             listOf(
-                "Im Bett" to formatDuration(report.timeInBedMinutes),
+                "Im Bett" to formatDuration(report.timeInBedMinutes) +
+                    (report.lightsOff?.let { " · Licht aus ${formatTime(it)}" } ?: ""),
                 "Einschlafdauer" to (report.latencyMinutes?.let { formatDuration(it) } ?: "–"),
                 "Effizienz" to "${(report.efficiency * 100).roundToInt()} %",
                 "Wachphasen" to "${report.awakenings}",
@@ -180,6 +181,16 @@ private fun ReportContent(night: NightRecording, report: SleepReport, modifier: 
         Spacer(Modifier.height(12.dp))
         ApneaText(report)
 
+        if (report.classifierUsed) {
+            Spacer(Modifier.height(12.dp))
+            StatGrid(
+                listOf(
+                    "Husten" to if (report.coughs == 0) "keins" else "${report.coughs}×",
+                    "Sprechen im Schlaf" to if (report.sleepTalkEpisodes == 0) "nein" else "${report.sleepTalkEpisodes}×",
+                ),
+            )
+        }
+
         SectionTitle("Geräusche")
         NoiseChart(report)
         Spacer(Modifier.height(8.dp))
@@ -202,8 +213,11 @@ private fun ReportContent(night: NightRecording, report: SleepReport, modifier: 
         }
 
         Text(
-            "Hinweis: Die Schlafanalyse arbeitet nur mit dem Mikrofon und ist keine medizinische Diagnose. " +
-                "Schnarcht jemand neben dir, kann das Handy die Geräusche nicht sicher zuordnen.",
+            "Hinweis: Die Schlafanalyse arbeitet mit Mikrofon" +
+                (if (report.classifierUsed) ", KI-Geräuscherkennung (YAMNet, offline)" else "") +
+                (if (report.usedMotion) " und Bewegungssensor" else "") +
+                " und ist keine medizinische Diagnose. " +
+                "Schnarcht oder spricht jemand neben dir, kann das Handy die Geräusche nicht sicher zuordnen.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(vertical = 24.dp),
