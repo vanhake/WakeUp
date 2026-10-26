@@ -1,6 +1,6 @@
 # WakeUp
 
-Android-Wecker im Stil von Alarmy: Der Wecker lässt sich nicht im Halbschlaf wegdrücken,
+Android-Wecker der garantiert weckt: Der Wecker lässt sich nicht im Halbschlaf wegdrücken,
 sondern nur durch eine Aufgabe beenden.
 
 ## Funktionen
