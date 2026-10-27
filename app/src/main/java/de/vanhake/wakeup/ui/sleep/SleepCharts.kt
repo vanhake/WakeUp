@@ -36,7 +36,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
-import de.vanhake.wakeup.sleep.NightSummary
 import de.vanhake.wakeup.sleep.analysis.RestState
 import de.vanhake.wakeup.sleep.analysis.SleepReport
 import de.vanhake.wakeup.ui.theme.Danger
@@ -47,7 +46,7 @@ import kotlin.math.roundToInt
 private const val MINUTE = 60_000L
 
 /** Selected position for tap/drag inspection, as a fraction 0..1 of the width. */
-private fun Modifier.inspect(onSelect: (Float?) -> Unit): Modifier = this
+internal fun Modifier.inspect(onSelect: (Float?) -> Unit): Modifier = this
     .pointerInput(Unit) {
         detectTapGestures(onPress = { offset ->
             onSelect((offset.x / size.width).coerceIn(0f, 1f))
@@ -209,52 +208,6 @@ fun NoiseChart(report: SleepReport, modifier: Modifier = Modifier) {
     }
 }
 
-/** Sleep duration of the last nights, oldest left. Tap a bar to see its value. */
-@Composable
-fun DurationBars(nights: List<NightSummary>, modifier: Modifier = Modifier) {
-    val shown = nights.take(14).reversed()
-    if (shown.isEmpty()) return
-    var selected by remember { mutableStateOf<Int?>(null) }
-    val maxMin = maxOf(9 * 60, shown.maxOf { it.sleepMinutes })
-    val outline = MaterialTheme.colorScheme.outlineVariant
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-
-    Column(modifier) {
-        Text(
-            selected?.let { shown[it] }?.let {
-                "${formatNightDate(it.start, short = true)} · ${formatDuration(it.sleepMinutes)} · Schlafwert ${it.score}"
-            } ?: "Schlafdauer der letzten ${shown.size} Nächte · Linie = 8 Std.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (selected != null) MaterialTheme.colorScheme.onSurface else muted,
-        )
-        Spacer(Modifier.height(8.dp))
-        Canvas(
-            Modifier
-                .fillMaxWidth()
-                .height(96.dp)
-                .pointerInput(shown) {
-                    detectTapGestures { o -> selected = (o.x / size.width * shown.size).toInt().coerceIn(0, shown.size - 1) }
-                },
-        ) {
-            val slot = size.width / 14
-            val barW = (slot - 6.dp.toPx()).coerceAtLeast(4.dp.toPx())
-            shown.forEachIndexed { i, night ->
-                val h = size.height * night.sleepMinutes / maxMin
-                val x = size.width - (shown.size - i) * slot + (slot - barW) / 2
-                drawRoundRect(
-                    if (selected == null || selected == i) CalmColor else CalmColor.copy(alpha = 0.45f),
-                    topLeft = Offset(x, size.height - h),
-                    size = Size(barW, h),
-                    cornerRadius = CornerRadius(4.dp.toPx()),
-                )
-            }
-            val y = size.height - size.height * 480f / maxMin
-            drawLine(muted, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
-            drawLine(outline, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1.dp.toPx())
-        }
-    }
-}
-
 @Composable
 private fun HourLabels(ticks: List<Pair<Int, Int>>, n: Int) {
     Box(Modifier.fillMaxWidth().height(20.dp)) {
@@ -271,10 +224,10 @@ private fun HourLabels(ticks: List<Pair<Int, Int>>, n: Int) {
     }
 }
 
-private fun xAlign(horizontal: Float) = BiasAlignment(horizontal.coerceIn(-1f, 1f), 0f)
+internal fun xAlign(horizontal: Float) = BiasAlignment(horizontal.coerceIn(-1f, 1f), 0f)
 
 @Composable
-private fun LegendItem(color: Color, text: String, round: Boolean = false) {
+internal fun LegendItem(color: Color, text: String, round: Boolean = false) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             Modifier

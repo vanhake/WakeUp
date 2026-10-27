@@ -24,6 +24,8 @@ class JsonFile(context: Context, name: String) {
 
     fun delete() = file.delete()
 
+    fun exists() = file.baseFile.exists()
+
     fun write(json: String) {
         val out = file.startWrite()
         try {

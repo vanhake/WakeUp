@@ -5,6 +5,7 @@ import android.util.Log
 import de.vanhake.wakeup.data.JsonFile
 import de.vanhake.wakeup.sleep.analysis.NightRecording
 import de.vanhake.wakeup.sleep.analysis.SleepAnalyzer
+import de.vanhake.wakeup.sleep.analysis.SleepReport
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +22,8 @@ data class NightSummary(
     val apneasPerHour: Float?,
     val score: Int,
     val interrupted: Boolean,
+    /** [SleepRepository.ANALYSIS_VERSION] the values were computed with. */
+    val version: Int = SleepRepository.ANALYSIS_VERSION,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("start", start)
@@ -30,6 +33,7 @@ data class NightSummary(
         apneasPerHour?.let { put("apneasPerHour", it.toDouble()) }
         put("score", score)
         put("interrupted", interrupted)
+        put("version", version)
     }
 
     companion object {
@@ -41,6 +45,17 @@ data class NightSummary(
             apneasPerHour = if (o.has("apneasPerHour")) o.getDouble("apneasPerHour").toFloat() else null,
             score = o.optInt("score"),
             interrupted = o.optBoolean("interrupted"),
+            version = o.optInt("version", 1),
+        )
+
+        fun of(night: NightRecording, report: SleepReport) = NightSummary(
+            start = night.start,
+            end = night.end,
+            sleepMinutes = report.sleepMinutes,
+            snoreMinutes = report.snoreMinutes,
+            apneasPerHour = report.apneasPerHour,
+            score = report.score,
+            interrupted = night.interrupted,
         )
     }
 }
@@ -48,7 +63,14 @@ data class NightSummary(
 /** Settings, recorded nights and audio samples of the sleep analysis, all stored on the device only. */
 object SleepRepository {
     private const val TAG = "SleepRepository"
-    private const val MAX_NIGHTS = 120
+    /** Nights whose full recording (and so the detailed report) is kept. */
+    private const val MAX_DETAILED_NIGHTS = 120
+
+    /** Nights kept in the history (about ten years); only the summary of older ones. */
+    private const val MAX_NIGHTS = 3660
+
+    /** Increase when [SleepAnalyzer] changes, so stored summaries are computed again. */
+    const val ANALYSIS_VERSION = 2
     const val CLIP_LIFETIME_MS = 24 * 60 * 60 * 1000L
 
     private lateinit var settingsFile: JsonFile
@@ -109,21 +131,39 @@ object SleepRepository {
             night.clips.forEach { File(clipDir, it.file).delete() }
             return null
         }
-        val report = SleepAnalyzer.analyze(night)
-        nightFile(night.start).write(night.toJson().toString())
-        val summary = NightSummary(
-            start = night.start,
-            end = night.end,
-            sleepMinutes = report.sleepMinutes,
-            snoreMinutes = report.snoreMinutes,
-            apneasPerHour = report.apneasPerHour,
-            score = report.score,
-            interrupted = night.interrupted,
-        )
+        // Analyse what is stored (values rounded in the file), so the summary matches the report.
+        val json = night.toJson()
+        val summary = NightSummary.of(night, SleepAnalyzer.analyze(NightRecording.fromJson(json)))
+        nightFile(night.start).write(json.toString())
         val all = (listOf(summary) + _nights.value.filterNot { it.start == night.start }).sortedByDescending { it.start }
+        all.drop(MAX_DETAILED_NIGHTS).filter { nightFile(it.start).exists() }.forEach { deleteFiles(it.start) }
         all.drop(MAX_NIGHTS).forEach { deleteFiles(it.start) }
         saveIndex(all.take(MAX_NIGHTS))
         return summary
+    }
+
+    /** Replaces the stored summary if the freshly computed [report] gives other values. */
+    @Synchronized
+    fun syncSummary(night: NightRecording, report: SleepReport) {
+        val summary = NightSummary.of(night, report)
+        val list = _nights.value
+        if (list.none { it.start == night.start } || summary in list) return
+        saveIndex(list.map { if (it.start == night.start) summary else it })
+    }
+
+    /**
+     * Computes summaries again that were stored by an older analysis or differ from the
+     * report (earlier versions analysed the unrounded data). Slow; call off the main thread.
+     */
+    fun refreshOutdatedSummaries() {
+        val outdated = _nights.value.filter { it.version < ANALYSIS_VERSION }
+        if (outdated.isEmpty()) return
+        val fresh = outdated.associate { old ->
+            old.start to (loadNight(old.start)?.let { NightSummary.of(it, SleepAnalyzer.analyze(it)) } ?: old.copy(version = ANALYSIS_VERSION))
+        }
+        synchronized(this) {
+            saveIndex(_nights.value.map { fresh[it.start] ?: it })
+        }
     }
 
     fun loadNight(start: Long): NightRecording? = nightFile(start).read()?.let {

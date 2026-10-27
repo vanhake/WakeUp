@@ -2,6 +2,7 @@ package de.vanhake.wakeup
 
 import de.vanhake.wakeup.sleep.analysis.Burst
 import de.vanhake.wakeup.sleep.analysis.BurstClassifier
+import de.vanhake.wakeup.sleep.analysis.LabelWindow
 import de.vanhake.wakeup.sleep.analysis.ClipType
 import de.vanhake.wakeup.sleep.analysis.LiveDetector
 import de.vanhake.wakeup.sleep.analysis.MinuteLevel
@@ -10,7 +11,9 @@ import de.vanhake.wakeup.sleep.analysis.RestState
 import de.vanhake.wakeup.sleep.analysis.ScreenEvent
 import de.vanhake.wakeup.sleep.analysis.SleepAnalyzer
 import de.vanhake.wakeup.sleep.analysis.SleepClip
+import de.vanhake.wakeup.sleep.analysis.SoundLabel
 import de.vanhake.wakeup.sleep.analysis.SoundType
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -207,5 +210,21 @@ class SleepAnalysisTest {
         val live = LiveDetector(clipsEnabled = false)
         listOf(rustle(0), rustle(60_000), rustle(61_000), rustle(130_000)).forEach { live.onBurst(it) }
         assertEquals(3, live.movementsSince(30_000))
+    }
+
+    @Test
+    fun storedNightGivesTheSameReportAgain() {
+        // Overlapping classifier windows with scores that only differ after rounding to 0.01.
+        val bursts = snoring(0, 120).mapIndexed { i, b -> b.copy(peakDb = -40f - (i % 7) * 0.037f, lowRatio = 0.5503f) }
+        val labels = bursts.flatMap { b ->
+            listOf(LabelWindow(b.startMs - 300, SoundLabel.SPEECH, 0.5341f), LabelWindow(b.startMs, SoundLabel.SNORE, 0.5329f))
+        }
+        val night = NightRecording(
+            start = 0, end = 10 * minute, bursts = bursts, minutes = emptyList(), screen = emptyList(),
+            labels = labels, classifierUsed = true,
+        )
+        val stored = NightRecording.fromJson(night.toJson())
+        val again = NightRecording.fromJson(JSONObject(stored.toJson().toString()))
+        assertEquals(SleepAnalyzer.analyze(stored), SleepAnalyzer.analyze(again))
     }
 }

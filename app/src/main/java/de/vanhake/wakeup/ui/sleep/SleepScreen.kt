@@ -9,7 +9,6 @@ import android.provider.Settings as SystemSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -62,7 +61,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import de.vanhake.wakeup.sleep.NightSummary
 import de.vanhake.wakeup.sleep.RecordingMode
 import de.vanhake.wakeup.sleep.SleepRepository
 import de.vanhake.wakeup.sleep.SleepScheduler
@@ -233,7 +231,7 @@ fun SleepScreen(onClose: () -> Unit, onOpenReport: (Long) -> Unit) {
                 })
             }
 
-            SectionTitle("Letzte Nächte")
+            SectionTitle("Verlauf")
             if (nights.isEmpty()) {
                 Text(
                     "Noch keine Nacht aufgezeichnet.",
@@ -241,11 +239,7 @@ fun SleepScreen(onClose: () -> Unit, onOpenReport: (Long) -> Unit) {
                     modifier = Modifier.padding(vertical = 8.dp),
                 )
             } else {
-                DurationBars(nights)
-                Spacer(Modifier.height(16.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    nights.forEach { NightCard(it) { onOpenReport(it.start) } }
-                }
+                SleepHistory(nights, onOpenReport)
             }
             Text(
                 "Alles wird nur auf dem Handy ausgewertet und gespeichert. Die Analyse ist keine medizinische " +
@@ -295,36 +289,6 @@ private fun RecordingCard(since: Long?, onStart: () -> Unit, onStop: () -> Unit)
             }
             Spacer(Modifier.height(16.dp))
             BigOutlinedButton(text = "Beenden und auswerten", icon = Icons.Filled.Stop, onClick = onStop)
-        }
-    }
-}
-
-@Composable
-private fun NightCard(night: NightSummary, onClick: () -> Unit) {
-    Card(
-        onClick = onClick,
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(Modifier.padding(horizontal = 20.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(formatNightDate(night.start), style = MaterialTheme.typography.titleMedium)
-                Text(
-                    buildString {
-                        append("${formatDuration(night.sleepMinutes)} Schlaf")
-                        if (night.snoreMinutes > 0) append(" · ${night.snoreMinutes} Min. Schnarchen")
-                        if (night.interrupted) append(" · unterbrochen")
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Text(
-                "${night.score}",
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
         }
     }
 }

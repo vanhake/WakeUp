@@ -2,6 +2,7 @@ package de.vanhake.wakeup.ui.sleep
 
 import androidx.compose.ui.graphics.Color
 import de.vanhake.wakeup.sleep.analysis.ClipType
+import de.vanhake.wakeup.sleep.nightDate
 import de.vanhake.wakeup.sleep.analysis.RestState
 import java.time.Instant
 import java.time.ZoneId
@@ -45,8 +46,7 @@ fun formatTime(millis: Long): String = TIME.format(Instant.ofEpochMilli(millis).
 
 /** Date of the evening the night started (a recording after midnight belongs to the day before). */
 fun formatNightDate(start: Long, short: Boolean = false): String {
-    val time = Instant.ofEpochMilli(start).atZone(ZoneId.systemDefault()).let { if (it.hour < 12) it.minusDays(1) else it }
-    return (if (short) SHORT_DATE else DATE).format(time).replace(".,", ",")
+    return (if (short) SHORT_DATE else DATE).format(nightDate(start)).replace(".,", ",")
 }
 
 fun formatDuration(minutes: Int): String {

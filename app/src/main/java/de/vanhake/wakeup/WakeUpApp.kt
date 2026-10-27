@@ -17,5 +17,6 @@ class WakeUpApp : Application() {
         // A night whose recording was killed is saved with the data recorded so far.
         SleepRepository.recoverCheckpoint()
         SleepScheduler.scheduleNextStart(this)
+        Thread(SleepRepository::refreshOutdatedSummaries, "SleepSummaries").start()
     }
 }

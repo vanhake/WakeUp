@@ -67,7 +67,9 @@ fun SleepReportScreen(start: Long, onClose: () -> Unit) {
     var confirmDelete by remember { mutableStateOf(false) }
     LaunchedEffect(start) {
         val result = withContext(Dispatchers.Default) {
-            SleepRepository.loadNight(start)?.let { it to SleepAnalyzer.analyze(it) }
+            SleepRepository.loadNight(start)?.let { night ->
+                night to SleepAnalyzer.analyze(night).also { SleepRepository.syncSummary(night, it) }
+            }
         }
         data = result
         missing = result == null
@@ -109,7 +111,20 @@ fun SleepReportScreen(start: Long, onClose: () -> Unit) {
         val loaded = data
         when {
             loaded != null -> ReportContent(loaded.first, loaded.second, Modifier.padding(padding))
-            missing -> Text("Diese Nacht ist nicht mehr gespeichert.", modifier = Modifier.padding(padding).padding(20.dp))
+            missing -> {
+                val summary = SleepRepository.nights.value.firstOrNull { it.start == start }
+                Text(
+                    if (summary == null) {
+                        "Diese Nacht ist nicht mehr gespeichert."
+                    } else {
+                        "Schlafwert ${summary.score} · ${formatDuration(summary.sleepMinutes)} Schlaf" +
+                            (if (summary.snoreMinutes > 0) " · ${summary.snoreMinutes} Min. Schnarchen" else "") +
+                            "\n\nDie Details werden nur für die letzten 120 Nächte gespeichert."
+                    },
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(padding).padding(20.dp),
+                )
+            }
             else -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
