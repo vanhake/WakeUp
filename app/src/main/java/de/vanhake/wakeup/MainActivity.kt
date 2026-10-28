@@ -1,5 +1,6 @@
 package de.vanhake.wakeup
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -14,6 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,11 +27,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import de.vanhake.wakeup.alarm.AlarmService
 import de.vanhake.wakeup.data.Alarm
 import de.vanhake.wakeup.data.AlarmRepository
+import de.vanhake.wakeup.sleep.SleepRepository
+import de.vanhake.wakeup.sleep.SleepTrackingService
 import de.vanhake.wakeup.ui.AlarmListScreen
 import de.vanhake.wakeup.ui.EditAlarmScreen
 import de.vanhake.wakeup.ui.SettingsScreen
@@ -39,6 +46,10 @@ import de.vanhake.wakeup.ui.components.BigOutlinedButton
 import de.vanhake.wakeup.ui.ringing.RingingRoute
 import de.vanhake.wakeup.ui.theme.WakeUpTheme
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
@@ -63,15 +74,38 @@ class MainActivity : ComponentActivity() {
         val report = intent?.getLongExtra(EXTRA_SLEEP_REPORT, -1L) ?: -1L
         if (report > 0) openReport.value = report
         intent?.removeExtra(EXTRA_SLEEP_REPORT)
+        if (intent?.getBooleanExtra(EXTRA_AFTER_ALARM, false) == true) {
+            val night = intent.getLongExtra(EXTRA_NIGHT, -1L)
+            afterAlarm.value = AfterAlarm(night.takeIf { it > 0 })
+        }
+        intent?.removeExtra(EXTRA_AFTER_ALARM)
+        intent?.removeExtra(EXTRA_NIGHT)
     }
+
+    /** The app opened after a solved alarm; [night] is the sleep recording that ended with it. */
+    data class AfterAlarm(val night: Long?)
 
     companion object {
         const val EXTRA_SLEEP_REPORT = "sleep_report"
+        private const val EXTRA_AFTER_ALARM = "after_alarm"
+        private const val EXTRA_NIGHT = "night"
 
         /** Sleep report to open, set when the app is opened from the report notification. */
         val openReport = MutableStateFlow<Long?>(null)
+
+        /** Set when the app is opened by the ringing screen after the challenge was solved. */
+        val afterAlarm = MutableStateFlow<AfterAlarm?>(null)
+
+        fun afterAlarmIntent(context: Context, night: Long?): Intent =
+            Intent(context, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .putExtra(EXTRA_AFTER_ALARM, true)
+                .apply { if (night != null) putExtra(EXTRA_NIGHT, night) }
     }
 }
+
+/** How long to wait for the report of the night that ended with the alarm. */
+private const val REPORT_WAIT_MS = 60_000L
 
 private val AlarmSaver = Saver<Alarm?, String>(
     save = { it?.toJson()?.toString() ?: "" },
@@ -85,6 +119,7 @@ private fun App() {
     var settings by rememberSaveable { mutableStateOf(false) }
     var sleep by rememberSaveable { mutableStateOf(false) }
     var report by rememberSaveable { mutableStateOf<Long?>(null) }
+    var awaitingReport by rememberSaveable { mutableStateOf<Long?>(null) }
     val ringingId by AlarmService.ringingAlarmId.collectAsState()
     val requestedReport by MainActivity.openReport.collectAsState()
     LaunchedEffect(requestedReport) {
@@ -92,6 +127,34 @@ private fun App() {
             report = it
             MainActivity.openReport.value = null
         }
+    }
+    // After a solved alarm: the night's sleep report if one was recorded, else the alarm list.
+    val afterAlarm by MainActivity.afterAlarm.collectAsState()
+    LaunchedEffect(afterAlarm) {
+        afterAlarm?.let {
+            editing = null
+            preview = null
+            settings = false
+            sleep = false
+            report = null
+            awaitingReport = it.night
+            MainActivity.afterAlarm.value = null
+        }
+    }
+    LaunchedEffect(awaitingReport) {
+        val night = awaitingReport ?: return@LaunchedEffect
+        // The recording stops with the alarm; its report is ready once the night is saved.
+        val saved = withTimeoutOrNull(REPORT_WAIT_MS) {
+            combine(SleepRepository.nights, SleepTrackingService.recordingSince) { nights, recording ->
+                when {
+                    nights.any { it.start == night } -> true
+                    recording != night -> false
+                    else -> null
+                }
+            }.filterNotNull().first()
+        }
+        if (saved == true) report = night
+        awaitingReport = null
     }
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -101,7 +164,11 @@ private fun App() {
             // While an alarm rings, the app shows nothing but the ringing screen.
             ringingId != null -> {
                 BackHandler { }
-                RingingRoute()
+                RingingRoute(onSolved = { MainActivity.afterAlarm.value = MainActivity.AfterAlarm(it) })
+            }
+            awaitingReport != null -> {
+                BackHandler { awaitingReport = null }
+                AwaitingReport(onSkip = { awaitingReport = null })
             }
             report != null -> {
                 BackHandler { report = null }
@@ -136,6 +203,27 @@ private fun App() {
                 onOpenReport = { report = it },
             )
         }
+    }
+}
+
+@Composable
+private fun AwaitingReport(onSkip: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator()
+                Text(
+                    "Schlafbericht wird erstellt …",
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 24.dp),
+                )
+            }
+        }
+        BigOutlinedButton(text = "Zur Weckerliste", icon = Icons.Filled.Alarm, onClick = onSkip)
     }
 }
 
