@@ -186,7 +186,7 @@ class SleepTrackingService : Service() {
             alarmDismissAt = now
         }
         // An alarm shortly after going to bed (e.g. a reminder) does not end the night.
-        if (System.currentTimeMillis() - start >= 2 * 60 * 60 * 1000L) requestStop(discard = false)
+        if (System.currentTimeMillis() - start >= MIN_NIGHT_FOR_ALARM_MS) requestStop(discard = false)
     }
 
     private fun requestStop(discard: Boolean) {
@@ -462,6 +462,9 @@ class SleepTrackingService : Service() {
         private const val FRAMES_PER_10S = 10_000 / FRAME_MS
         private const val CHECKPOINT_MS = 10 * 60 * 1000L
 
+        /** Dismissing an alarm ends the recording only once it has run this long. */
+        private const val MIN_NIGHT_FOR_ALARM_MS = 2 * 60 * 60 * 1000L
+
         /** m/s² of acceleration beyond gravity that counts as a movement of the mattress. */
         private const val MOTION_THRESHOLD = 0.15f
 
@@ -488,6 +491,10 @@ class SleepTrackingService : Service() {
         fun alarmSnoozed() {
             instance?.onAlarmSilenced(dismissed = false)
         }
+
+        /** Start of the recording that dismissing the ringing alarm now would end, or null. */
+        fun nightEndingWithAlarm(): Long? =
+            _recordingSince.value?.takeIf { System.currentTimeMillis() - it >= MIN_NIGHT_FOR_ALARM_MS }
 
         fun alarmDismissed() {
             instance?.onAlarmSilenced(dismissed = true)

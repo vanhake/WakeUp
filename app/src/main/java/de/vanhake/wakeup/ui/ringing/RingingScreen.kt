@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material.icons.Icons
@@ -35,6 +34,7 @@ import de.vanhake.wakeup.alarm.AlarmService
 import de.vanhake.wakeup.data.Alarm
 import de.vanhake.wakeup.data.AlarmRepository
 import de.vanhake.wakeup.data.ChallengeType
+import de.vanhake.wakeup.sleep.SleepTrackingService
 import de.vanhake.wakeup.ui.challenge.ChallengeHost
 import de.vanhake.wakeup.ui.components.BigButton
 import de.vanhake.wakeup.ui.theme.SurfaceHigh
@@ -42,9 +42,12 @@ import kotlinx.coroutines.delay
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
-/** Ringing screen for the alarm that currently rings; shown by both activities. */
+/**
+ * Ringing screen for the alarm that currently rings; shown by both activities. [onSolved] gets
+ * the start of the sleep recording that ends with this alarm, or null.
+ */
 @Composable
-fun RingingRoute() {
+fun RingingRoute(onSolved: (night: Long?) -> Unit) {
     val context = LocalContext.current
     val ringingId by AlarmService.ringingAlarmId.collectAsState()
     val alarms by AlarmRepository.alarms.collectAsState()
@@ -52,12 +55,17 @@ fun RingingRoute() {
     RingingScreen(
         alarm = alarm,
         onSnooze = { AlarmService.snooze(context) },
-        onSolved = { AlarmService.dismiss(context) },
+        onSolved = {
+            // Read before dismissing: the recording stops as soon as the alarm is dismissed.
+            val night = SleepTrackingService.nightEndingWithAlarm()
+            AlarmService.dismiss(context)
+            onSolved(night)
+        },
         onChallengeActive = { AlarmService.setQuiet(context, it) },
     )
 }
 
-/** Without a touch for this long the challenge is abandoned and the alarm is loud again. */
+/** Without any input for this long the challenge is abandoned and the ringing screen returns. */
 private const val INACTIVITY_TIMEOUT_MS = 30_000L
 
 @Composable
@@ -70,14 +78,14 @@ fun RingingScreen(
     var inChallenge by remember { mutableStateOf(false) }
     var lastInteraction by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val currentOnChallengeActive by rememberUpdatedState(onChallengeActive)
-    // Walking to the barcode takes a while without touching the screen, and it should stay loud.
+    // It stays loud while walking to the barcode.
     val quietDuringChallenge = alarm.challenge != ChallengeType.BARCODE
 
     LaunchedEffect(inChallenge) {
         if (quietDuringChallenge) currentOnChallengeActive(inChallenge)
     }
     LaunchedEffect(inChallenge, lastInteraction) {
-        if (inChallenge && quietDuringChallenge) {
+        if (inChallenge) {
             delay(INACTIVITY_TIMEOUT_MS)
             inChallenge = false
         }
@@ -122,24 +130,11 @@ private fun RingingContent(alarm: Alarm, onSnooze: () -> Unit, onStop: () -> Uni
         }
     }
 
+    // Snooze at the very top, stop at the very bottom: a sleepy thumb can't mix them up.
     Column(
         Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.weight(1f))
-        Text(
-            now.format(DateTimeFormatter.ofPattern("HH:mm")),
-            fontSize = 88.sp,
-            fontWeight = FontWeight.Light,
-        )
-        Text(
-            alarm.label.ifBlank { "Guten Morgen!" },
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.weight(1.5f))
-
         if (alarm.maxSnoozes > 0) {
             val left = alarm.snoozesLeft
             BigButton(
@@ -155,9 +150,20 @@ private fun RingingContent(alarm: Alarm, onSnooze: () -> Unit, onStop: () -> Uni
                 containerColor = SurfaceHigh,
                 contentColor = MaterialTheme.colorScheme.onSurface,
             )
-            // Generous gap so a sleepy thumb doesn't hit the wrong button.
-            Spacer(Modifier.height(40.dp))
         }
+        Spacer(Modifier.weight(1f))
+        Text(
+            now.format(DateTimeFormatter.ofPattern("HH:mm")),
+            fontSize = 88.sp,
+            fontWeight = FontWeight.Light,
+        )
+        Text(
+            alarm.label.ifBlank { "Guten Morgen!" },
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.weight(1f))
         BigButton(
             text = when (alarm.challenge) {
                 ChallengeType.MATH -> "Ausschalten · Rechnen"

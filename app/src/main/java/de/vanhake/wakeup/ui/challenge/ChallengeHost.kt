@@ -33,7 +33,7 @@ fun ChallengeHost(alarm: Alarm, onSolved: () -> Unit, onInteraction: () -> Unit)
         alarm.challenge == ChallengeType.SHAKE && canShake ->
             ShakeChallenge(alarm.shakeCount, onSolved, onShake = onInteraction)
         alarm.challenge == ChallengeType.BARCODE && barcode != null ->
-            BarcodeChallenge(barcode, onSolved, onEmergency = { emergency = true })
+            BarcodeChallenge(barcode, onSolved, onEmergency = { emergency = true }, onScan = onInteraction)
         // No accelerometer, or the barcode was removed from the library.
         else ->
             MathChallenge(MathDifficulty.HARD, EMERGENCY_MATH_COUNT, onSolved)

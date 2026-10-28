@@ -143,11 +143,17 @@ fun BarcodeScanPane(
 }
 
 @Composable
-fun BarcodeChallenge(expected: SavedBarcode, onSolved: () -> Unit, onEmergency: () -> Unit) {
+fun BarcodeChallenge(
+    expected: SavedBarcode,
+    onSolved: () -> Unit,
+    onEmergency: () -> Unit,
+    onScan: () -> Unit,
+) {
     BarcodeScanPane(
         title = "Scanne: ${expected.name}",
         hint = "Steh auf und geh zu dem Gegenstand mit diesem Code.",
         onScanned = { code ->
+            onScan()
             val ok = code == expected.value
             if (ok) onSolved()
             ok
