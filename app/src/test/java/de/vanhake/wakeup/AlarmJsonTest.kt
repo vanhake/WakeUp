@@ -21,6 +21,7 @@ class AlarmJsonTest {
                 vibrate = false, volume = 0.5f, ringtoneUri = "content://media/internal/audio/media/12",
                 snoozesUsed = 1, snoozedUntil = 1_793_000_000_000L,
             ),
+            Alarm(id = 3, challenge = ChallengeType.NONE),
         )
         assertEquals(alarms, Alarm.listFromJson(Alarm.listToJson(alarms)))
     }

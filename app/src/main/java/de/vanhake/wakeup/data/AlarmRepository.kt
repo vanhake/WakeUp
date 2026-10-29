@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * Stores alarms as JSON in device-protected storage, so alarms can be restored and
@@ -17,10 +18,24 @@ object AlarmRepository {
     private val _alarms = MutableStateFlow<List<Alarm>>(emptyList())
     val alarms: StateFlow<List<Alarm>> = _alarms.asStateFlow()
 
+    private lateinit var defaultsFile: JsonFile
+    private val _defaults = MutableStateFlow(Alarm(id = 0))
+
+    /** Template for new alarms, set in the settings; its id is unused. */
+    val defaults: StateFlow<Alarm> = _defaults.asStateFlow()
+
     @Synchronized
     fun init(context: Context) {
         if (::file.isInitialized) return
         BarcodeRepository.init(context)
+        defaultsFile = JsonFile(context, "alarm_defaults.json")
+        defaultsFile.read()?.let {
+            try {
+                _defaults.value = Alarm.fromJson(JSONObject(it))
+            } catch (e: Exception) {
+                Log.e(TAG, "Could not parse alarm defaults", e)
+            }
+        }
         file = JsonFile(context, "alarms.json")
         val json = file.read() ?: return
         try {
@@ -51,6 +66,16 @@ object AlarmRepository {
 
     @Synchronized
     fun nextId(): Int = (_alarms.value.maxOfOrNull { it.id } ?: 0) + 1
+
+    /** A new, not yet saved alarm with the default settings. */
+    fun newAlarm(): Alarm = _defaults.value.copy(id = nextId())
+
+    @Synchronized
+    fun saveDefaults(alarm: Alarm) {
+        val defaults = alarm.copy(id = 0, enabled = true, snoozesUsed = 0, snoozedUntil = null, smartWakeTarget = null)
+        defaultsFile.write(defaults.toJson().toString())
+        _defaults.value = defaults
+    }
 
     @Synchronized
     fun upsert(alarm: Alarm) {

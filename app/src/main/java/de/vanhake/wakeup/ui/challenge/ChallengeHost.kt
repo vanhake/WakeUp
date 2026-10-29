@@ -2,6 +2,7 @@ package de.vanhake.wakeup.ui.challenge
 
 import android.hardware.SensorManager
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,6 +27,8 @@ fun ChallengeHost(alarm: Alarm, onSolved: () -> Unit, onInteraction: () -> Unit)
     val barcode = remember(alarm.barcodeId) { BarcodeRepository.get(alarm.barcodeId) }
 
     when {
+        alarm.challenge == ChallengeType.NONE ->
+            LaunchedEffect(Unit) { onSolved() }
         emergency ->
             MathChallenge(MathDifficulty.HARD, EMERGENCY_MATH_COUNT, onSolved)
         alarm.challenge == ChallengeType.MATH ->

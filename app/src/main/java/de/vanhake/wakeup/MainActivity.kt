@@ -24,7 +24,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -37,6 +36,7 @@ import de.vanhake.wakeup.data.AlarmRepository
 import de.vanhake.wakeup.sleep.SleepRepository
 import de.vanhake.wakeup.sleep.SleepTrackingService
 import de.vanhake.wakeup.ui.AlarmListScreen
+import de.vanhake.wakeup.ui.AlarmSaver
 import de.vanhake.wakeup.ui.EditAlarmScreen
 import de.vanhake.wakeup.ui.SettingsScreen
 import de.vanhake.wakeup.ui.challenge.ChallengeHost
@@ -50,7 +50,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
-import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -106,11 +105,6 @@ class MainActivity : ComponentActivity() {
 
 /** How long to wait for the report of the night that ended with the alarm. */
 private const val REPORT_WAIT_MS = 60_000L
-
-private val AlarmSaver = Saver<Alarm?, String>(
-    save = { it?.toJson()?.toString() ?: "" },
-    restore = { if (it.isEmpty()) null else Alarm.fromJson(JSONObject(it)) },
-)
 
 @Composable
 private fun App() {
@@ -197,7 +191,7 @@ private fun App() {
             }
             else -> AlarmListScreen(
                 onEdit = { editing = it },
-                onCreate = { editing = Alarm(id = AlarmRepository.nextId()) },
+                onCreate = { editing = AlarmRepository.newAlarm() },
                 onSettings = { settings = true },
                 onSleep = { sleep = true },
                 onOpenReport = { report = it },
