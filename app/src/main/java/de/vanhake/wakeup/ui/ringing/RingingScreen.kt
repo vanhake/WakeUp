@@ -113,8 +113,12 @@ fun RingingScreen(
             )
         } else {
             RingingContent(alarm, onSnooze = onSnooze, onStop = {
-                lastInteraction = System.currentTimeMillis()
-                inChallenge = true
+                if (alarm.challenge == ChallengeType.NONE) {
+                    onSolved()
+                } else {
+                    lastInteraction = System.currentTimeMillis()
+                    inChallenge = true
+                }
             })
         }
     }
@@ -169,6 +173,7 @@ private fun RingingContent(alarm: Alarm, onSnooze: () -> Unit, onStop: () -> Uni
                 ChallengeType.MATH -> "Ausschalten · Rechnen"
                 ChallengeType.SHAKE -> "Ausschalten · Schütteln"
                 ChallengeType.BARCODE -> "Ausschalten · Scannen"
+                ChallengeType.NONE -> "Ausschalten"
             },
             icon = Icons.Filled.AlarmOff,
             onClick = onStop,

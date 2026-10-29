@@ -25,7 +25,10 @@ kommt ein neuer dazu. Oben rechts geht es zur Schlafanalyse (Mond) und zu den Ei
     speichern (z. B. „Zahnpasta im Bad“) und pro Wecker einen davon auswählen. Mit Taschenlampe;
     als Notausgang gibt es 6 schwere Matheaufgaben, falls der Code nicht greifbar ist.
     Neue Codes lassen sich auch direkt beim Bearbeiten des Weckers scannen.
+  - **Keine** – ein Tipp auf *Ausschalten* beendet den Wecker sofort.
   - **Aufgabe testen** führt die gewählte Aufgabe einmal probeweise aus, ohne dass ein Wecker klingelt.
+- **Standard für neue Wecker** – in den Einstellungen lässt sich festlegen, mit welcher Uhrzeit,
+  welchen Tagen, welcher Aufgabe, welchem Schlummern, Smart Wake und Ton ein neuer Wecker startet.
 - **Schlummern begrenzt** – maximale Anzahl (0–10) und Dauer (1–30 Min) pro Wecker. Während ein
   Wecker schlummert, kann er in der App weder ausgeschaltet noch bearbeitet werden.
 - **Weckbildschirm** – der Schlummer-Button liegt ganz oben, der Button zum Ausschalten ganz
@@ -61,7 +64,7 @@ kommt ein neuer dazu. Oben rechts geht es zur Schlafanalyse (Mond) und zu den Ei
 
 1. **Uhrzeit, Name und Tage** – Stunde und Minute über die Uhr wählen, ein Label vergeben und
    die Wochentage antippen oder per Schnellwahl *Werktags* / *Wochenende* / *Täglich* setzen.
-2. **Aufgabe und Schlummern** – *Rechnen*, *Schütteln* oder *Barcode* wählen; beim Barcode einen
+2. **Aufgabe und Schlummern** – *Rechnen*, *Schütteln*, *Barcode* oder *Keine* wählen; beim Barcode einen
    gespeicherten Code auswählen oder einen neuen scannen. *Aufgabe testen* probiert die Aufgabe
    aus. Darunter Anzahl und Dauer des Schlummerns.
 3. **Smart Wake und Ton** – Smart-Wake-Fenster (*Aus* / 10 / 20 / 30 Min), Weckton, Lautstärke

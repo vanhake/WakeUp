@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -61,6 +62,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -98,15 +101,21 @@ fun EditAlarmScreen(
     onChange: (Alarm) -> Unit,
     onClose: () -> Unit,
     onTest: (Alarm) -> Unit,
+    /** Edits the template for new alarms instead of an alarm. */
+    defaults: Boolean = false,
 ) {
     val context = LocalContext.current
     val alarm = initial
     val currentAlarm by rememberUpdatedState(alarm)
-    val isNew = AlarmRepository.get(alarm.id) == null
+    val isNew = !defaults && AlarmRepository.get(alarm.id) == null
     var scanning by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
 
-    val timeState = rememberTimePickerState(initialHour = alarm.hour, initialMinute = alarm.minute, is24Hour = true)
+    // Bumped on reset, so the time picker shows the reset time.
+    var resets by remember { mutableIntStateOf(0) }
+    val timeState = key(resets) {
+        rememberTimePickerState(initialHour = alarm.hour, initialMinute = alarm.minute, is24Hour = true)
+    }
     LaunchedEffect(timeState) {
         snapshotFlow { timeState.hour to timeState.minute }.collect { (h, m) ->
             if (h != currentAlarm.hour || m != currentAlarm.minute) onChange(currentAlarm.copy(hour = h, minute = m))
@@ -140,7 +149,15 @@ fun EditAlarmScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text(if (isNew) "Neuer Wecker" else "Wecker bearbeiten") },
+                title = {
+                    Text(
+                        when {
+                            defaults -> "Standard für neue Wecker"
+                            isNew -> "Neuer Wecker"
+                            else -> "Wecker bearbeiten"
+                        },
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onClose, modifier = Modifier.size(56.dp)) {
                         Icon(Icons.Filled.Close, contentDescription = "Schließen")
@@ -156,7 +173,9 @@ fun EditAlarmScreen(
                     .navigationBarsPadding()
                     .padding(horizontal = 20.dp, vertical = 12.dp),
             ) {
-                BigButton(text = "Speichern", onClick = { save(context, alarm, onClose) })
+                BigButton(text = "Speichern", onClick = {
+                    if (defaults) saveDefaults(context, alarm, onClose) else save(context, alarm, onClose)
+                })
             }
         },
     ) { padding ->
@@ -202,7 +221,7 @@ fun EditAlarmScreen(
             )
 
             SectionTitle("Aufgabe zum Ausschalten")
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ChallengeType.entries.forEach { type ->
                     ChallengeOption(type, selected = alarm.challenge == type, modifier = Modifier.weight(1f)) {
                         val barcodeId = alarm.barcodeId?.takeIf { BarcodeRepository.get(it) != null }
@@ -226,19 +245,26 @@ fun EditAlarmScreen(
                     onSelect = { onChange(alarm.copy(barcodeId = it)) },
                     onAdd = { scanning = true },
                 )
+                ChallengeType.NONE -> Text(
+                    "Ein Tipp auf „Ausschalten“ beendet den Wecker sofort.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            Spacer(Modifier.height(12.dp))
-            BigOutlinedButton(
-                text = "Aufgabe testen",
-                icon = Icons.Filled.PlayArrow,
-                onClick = {
-                    if (missingBarcode(alarm)) {
-                        Toast.makeText(context, "Bitte zuerst einen Barcode auswählen", Toast.LENGTH_SHORT).show()
-                    } else {
-                        onTest(alarm)
-                    }
-                },
-            )
+            if (!defaults && alarm.challenge != ChallengeType.NONE) {
+                Spacer(Modifier.height(12.dp))
+                BigOutlinedButton(
+                    text = "Aufgabe testen",
+                    icon = Icons.Filled.PlayArrow,
+                    onClick = {
+                        if (missingBarcode(alarm)) {
+                            Toast.makeText(context, "Bitte zuerst einen Barcode auswählen", Toast.LENGTH_SHORT).show()
+                        } else {
+                            onTest(alarm)
+                        }
+                    },
+                )
+            }
 
             SectionTitle("Schlummern")
             LabeledSlider(
@@ -282,7 +308,17 @@ fun EditAlarmScreen(
                 Switch(checked = alarm.vibrate, onCheckedChange = { onChange(alarm.copy(vibrate = it)) })
             }
 
-            if (!isNew) {
+            if (defaults) {
+                Spacer(Modifier.height(24.dp))
+                BigOutlinedButton(
+                    text = "Zurücksetzen",
+                    icon = Icons.Filled.Restore,
+                    onClick = {
+                        onChange(Alarm(id = alarm.id))
+                        resets++
+                    },
+                )
+            } else if (!isNew) {
                 Spacer(Modifier.height(24.dp))
                 BigOutlinedButton(
                     text = "Wecker löschen",
@@ -305,6 +341,16 @@ private fun save(context: Context, alarm: Alarm, onClose: () -> Unit) {
     AlarmRepository.upsert(saved)
     AlarmScheduler.schedule(context, saved)
     toastNextRing(context, saved)
+    onClose()
+}
+
+private fun saveDefaults(context: Context, alarm: Alarm, onClose: () -> Unit) {
+    if (missingBarcode(alarm)) {
+        Toast.makeText(context, "Bitte zuerst einen Barcode auswählen", Toast.LENGTH_SHORT).show()
+        return
+    }
+    AlarmRepository.saveDefaults(alarm)
+    Toast.makeText(context, "Neue Wecker starten mit diesen Einstellungen", Toast.LENGTH_SHORT).show()
     onClose()
 }
 

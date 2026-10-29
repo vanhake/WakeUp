@@ -4,7 +4,12 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.time.DayOfWeek
 
-enum class ChallengeType { MATH, SHAKE, BARCODE }
+enum class ChallengeType {
+    MATH, SHAKE, BARCODE,
+
+    /** No task: the stop button turns the alarm off right away. */
+    NONE,
+}
 
 enum class MathDifficulty { EASY, MEDIUM, HARD }
 

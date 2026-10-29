@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -43,6 +44,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,6 +53,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.vanhake.wakeup.BuildConfig
+import de.vanhake.wakeup.data.Alarm
 import de.vanhake.wakeup.data.AlarmRepository
 import de.vanhake.wakeup.data.BarcodeRepository
 import de.vanhake.wakeup.data.ChallengeType
@@ -69,9 +72,22 @@ fun SettingsScreen(onClose: () -> Unit) {
     var adding by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<SavedBarcode?>(null) }
     var deleting by remember { mutableStateOf<SavedBarcode?>(null) }
+    var editingDefaults by rememberSaveable(stateSaver = AlarmSaver) { mutableStateOf<Alarm?>(null) }
 
     if (adding) {
         AddBarcodeFlow(onDone = { adding = false })
+        return
+    }
+
+    editingDefaults?.let { template ->
+        BackHandler { editingDefaults = null }
+        EditAlarmScreen(
+            initial = template,
+            onChange = { editingDefaults = it },
+            onClose = { editingDefaults = null },
+            onTest = {},
+            defaults = true,
+        )
         return
     }
 
@@ -104,6 +120,15 @@ fun SettingsScreen(onClose: () -> Unit) {
             confirmButton = {
                 TextButton(onClick = {
                     users.forEach { AlarmRepository.upsert(it.copy(challenge = ChallengeType.MATH, barcodeId = null)) }
+                    val defaults = AlarmRepository.defaults.value
+                    if (defaults.barcodeId == barcode.id) {
+                        AlarmRepository.saveDefaults(
+                            defaults.copy(
+                                challenge = if (defaults.challenge == ChallengeType.BARCODE) ChallengeType.MATH else defaults.challenge,
+                                barcodeId = null,
+                            ),
+                        )
+                    }
                     BarcodeRepository.delete(barcode.id)
                     deleting = null
                 }) { Text("Löschen", color = Danger) }
@@ -132,6 +157,20 @@ fun SettingsScreen(onClose: () -> Unit) {
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp),
         ) {
+            SectionTitle("Neue Wecker")
+            Text(
+                "Mit diesen Einstellungen startet jeder neue Wecker: Uhrzeit, Tage, Aufgabe, Schlummern, " +
+                    "Smart Wake und Ton.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(16.dp))
+            BigOutlinedButton(
+                text = "Standard für neue Wecker",
+                icon = Icons.Filled.Tune,
+                onClick = { editingDefaults = AlarmRepository.defaults.value },
+            )
+
             SectionTitle("Barcodes")
             Text(
                 "Gespeicherte Codes kannst du bei jedem Wecker auswählen. Am besten Gegenstände weit weg " +
