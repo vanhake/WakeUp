@@ -10,8 +10,10 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AlarmOff
 import androidx.compose.material.icons.filled.Snooze
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -23,6 +25,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -37,7 +40,6 @@ import de.vanhake.wakeup.data.ChallengeType
 import de.vanhake.wakeup.sleep.SleepTrackingService
 import de.vanhake.wakeup.ui.challenge.ChallengeHost
 import de.vanhake.wakeup.ui.components.BigButton
-import de.vanhake.wakeup.ui.theme.SurfaceHigh
 import kotlinx.coroutines.delay
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -76,6 +78,7 @@ fun RingingScreen(
     onChallengeActive: (Boolean) -> Unit,
 ) {
     var inChallenge by remember { mutableStateOf(false) }
+    var confirmStop by remember { mutableStateOf(false) }
     var lastInteraction by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val currentOnChallengeActive by rememberUpdatedState(onChallengeActive)
     // It stays loud while walking to the barcode.
@@ -114,13 +117,28 @@ fun RingingScreen(
         } else {
             RingingContent(alarm, onSnooze = onSnooze, onStop = {
                 if (alarm.challenge == ChallengeType.NONE) {
-                    onSolved()
+                    // Without a task a single half-asleep tap would end the alarm: ask first.
+                    confirmStop = true
                 } else {
                     lastInteraction = System.currentTimeMillis()
                     inChallenge = true
                 }
             })
         }
+    }
+
+    if (confirmStop) {
+        AlertDialog(
+            onDismissRequest = { confirmStop = false },
+            title = { Text("Wecker wirklich ausschalten?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmStop = false
+                    onSolved()
+                }) { Text("Ausschalten") }
+            },
+            dismissButton = { TextButton(onClick = { confirmStop = false }) { Text("Abbrechen") } },
+        )
     }
 }
 
@@ -151,8 +169,8 @@ private fun RingingContent(alarm: Alarm, onSnooze: () -> Unit, onStop: () -> Uni
                 onClick = onSnooze,
                 enabled = left > 0,
                 height = 80.dp,
-                containerColor = SurfaceHigh,
-                contentColor = MaterialTheme.colorScheme.onSurface,
+                containerColor = Color.White,
+                contentColor = Color.Black,
             )
         }
         Spacer(Modifier.weight(1f))
