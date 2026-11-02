@@ -23,6 +23,18 @@ tasks.register("printVersionName") {
     doLast { println(appVersionName) }
 }
 
+val releaseKeystore: File? = System.getenv("SIGNING_KEYSTORE_FILE")?.let { file(it) }?.takeIf { it.exists() }
+
+// In CI a release must never be signed with the debug key: abort instead of falling back.
+val ciWithoutReleaseKey = System.getenv("CI") != null && releaseKeystore == null
+tasks.matching { it.name == "assembleRelease" }.configureEach {
+    doFirst {
+        if (ciWithoutReleaseKey) {
+            throw GradleException("Release build in CI without SIGNING_KEYSTORE_FILE: refusing to sign with the debug key.")
+        }
+    }
+}
+
 android {
     namespace = "de.vanhake.wakeup"
     compileSdk = 35
@@ -37,9 +49,8 @@ android {
 
     // Release signing key comes from environment variables (set from GitHub secrets in CI).
     // Without them the release APK falls back to the debug key so local builds keep working.
-    val releaseKeystore = System.getenv("SIGNING_KEYSTORE_FILE")?.let { file(it) }
     signingConfigs {
-        if (releaseKeystore != null && releaseKeystore.exists()) {
+        if (releaseKeystore != null) {
             create("release") {
                 storeFile = releaseKeystore
                 storePassword = System.getenv("SIGNING_KEYSTORE_PASSWORD")

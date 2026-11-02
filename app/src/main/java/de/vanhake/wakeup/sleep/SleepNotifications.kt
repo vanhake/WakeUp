@@ -103,6 +103,14 @@ object SleepNotifications {
                 .setSmallIcon(R.drawable.ic_stat_alarm)
                 .setContentTitle("Dein Schlafbericht ist da")
                 .setContentText(text)
+                // Schlafwert und Schnarchen nicht auf dem Sperrbildschirm zeigen.
+                .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+                .setPublicVersion(
+                    NotificationCompat.Builder(context, CHANNEL_REPORT)
+                        .setSmallIcon(R.drawable.ic_stat_alarm)
+                        .setContentTitle("Dein Schlafbericht ist da")
+                        .build(),
+                )
                 .setAutoCancel(true)
                 .setContentIntent(openApp(context, 2, summary.start))
                 .build(),

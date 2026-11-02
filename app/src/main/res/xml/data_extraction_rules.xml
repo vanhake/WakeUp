@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12 und neuer. Die Schlafanalyse (Berichte, Atemaussetzer-Verdacht, Hörproben)
+     sind Gesundheitsdaten und verlassen das Handy nicht über das Google-Cloud-Backup.
+     Wecker, Standards und Barcodes werden weiter gesichert. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="device_file" path="sleep/" />
+    </cloud-backup>
+    <!-- Beim direkten Umzug auf ein neues Handy darf der Verlauf mit, die Hörproben nicht. -->
+    <device-transfer>
+        <exclude domain="device_file" path="sleep/clips/" />
+        <exclude domain="device_file" path="sleep/current.json" />
+    </device-transfer>
+</data-extraction-rules>

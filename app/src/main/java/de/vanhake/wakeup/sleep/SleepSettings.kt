@@ -21,8 +21,11 @@ data class SleepSettings(
     /** Without an alarm, automatic recording ends at this time. */
     val endHour: Int = 9,
     val endMinute: Int = 0,
-    /** Store short audio samples of snoring, breathing pauses and noise for 24 hours. */
-    val saveClips: Boolean = true,
+    /**
+     * Store short audio samples of snoring, breathing pauses and noise for 24 hours.
+     * Off by default: the samples can contain speech, also of other people in the room.
+     */
+    val saveClips: Boolean = false,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("mode", mode.name)
@@ -40,7 +43,7 @@ data class SleepSettings(
             startMinute = o.optInt("startMinute", 30),
             endHour = o.optInt("endHour", 9),
             endMinute = o.optInt("endMinute", 0),
-            saveClips = o.optBoolean("saveClips", true),
+            saveClips = o.optBoolean("saveClips", false),
         )
     }
 }
