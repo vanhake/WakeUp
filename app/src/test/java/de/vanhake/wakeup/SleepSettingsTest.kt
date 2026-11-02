@@ -60,7 +60,8 @@ class SleepSettingsTest {
     fun settingsJsonRoundTrip() {
         val s = SleepSettings(RecordingMode.WITH_ALARM, 23, 15, 8, 45, saveClips = false)
         assertEquals(s, SleepSettings.fromJson(JSONObject(s.toJson().toString())))
-        assertTrue(SleepSettings.fromJson(JSONObject()).saveClips)
+        assertFalse(SleepSettings.fromJson(JSONObject()).saveClips)
+        assertFalse(SleepSettings().saveClips)
     }
 
     @Test

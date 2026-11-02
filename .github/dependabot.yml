@@ -1,0 +1,12 @@
+# Wöchentliche Hinweise auf veraltete oder verwundbare Abhängigkeiten.
+# Die Actions sind auf Commit-SHAs gepinnt; Dependabot hält diese Pins aktuell.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly

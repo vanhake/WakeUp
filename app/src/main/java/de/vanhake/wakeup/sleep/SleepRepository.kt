@@ -128,7 +128,7 @@ object SleepRepository {
     @Synchronized
     fun saveNight(night: NightRecording): NightSummary? {
         if (night.end - night.start < 10 * 60_000L) {
-            night.clips.forEach { File(clipDir, it.file).delete() }
+            night.clips.forEach { clipFile(it.file).delete() }
             return null
         }
         // Analyse what is stored (values rounded in the file), so the summary matches the report.
@@ -181,7 +181,8 @@ object SleepRepository {
         saveIndex(_nights.value.filterNot { it.start == start })
     }
 
-    fun clipFile(name: String): File = File(clipDir, name)
+    /** Only the plain file name counts, so a stored name can never point outside [clipDir]. */
+    fun clipFile(name: String): File = File(clipDir, File(name).name)
 
     /** Stores the recording so far, so a night is not lost if the app gets killed. */
     fun writeCheckpoint(night: NightRecording) {
@@ -229,7 +230,7 @@ object SleepRepository {
     private fun nightFile(start: Long) = JsonFile(appContext, "sleep/night-$start.json")
 
     private fun deleteFiles(start: Long) {
-        loadNight(start)?.clips?.forEach { File(clipDir, it.file).delete() }
+        loadNight(start)?.clips?.forEach { clipFile(it.file).delete() }
         nightFile(start).delete()
     }
 

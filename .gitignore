@@ -6,3 +6,8 @@ local.properties
 .DS_Store
 captures/
 .kotlin/
+
+# Signaturschlüssel gehören nie ins Repo
+*.jks
+*.keystore
+*.jks.base64
