@@ -13,6 +13,10 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+/** Shown when the recording should start but the phone has not been unlocked since a reboot. */
+const val LOCKED_PROBLEM = "Das Handy wurde seit dem Neustart noch nicht entsperrt. Die Schlafdaten sind bis dahin " +
+    "verschlüsselt, deshalb startet die Aufzeichnung erst danach."
+
 object SleepNotifications {
     private const val CHANNEL_RECORDING = "sleep_recording"
     private const val CHANNEL_START = "sleep_start"

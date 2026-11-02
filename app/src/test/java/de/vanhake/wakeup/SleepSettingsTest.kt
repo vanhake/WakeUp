@@ -4,6 +4,7 @@ import de.vanhake.wakeup.alarm.nextRegularRing
 import de.vanhake.wakeup.data.Alarm
 import de.vanhake.wakeup.sleep.RecordingMode
 import de.vanhake.wakeup.sleep.SleepSettings
+import de.vanhake.wakeup.sleep.expiredNights
 import de.vanhake.wakeup.sleep.recordingDeadline
 import de.vanhake.wakeup.sleep.shouldRecord
 import org.json.JSONObject
@@ -62,6 +63,26 @@ class SleepSettingsTest {
         assertEquals(s, SleepSettings.fromJson(JSONObject(s.toJson().toString())))
         assertFalse(SleepSettings.fromJson(JSONObject()).saveClips)
         assertFalse(SleepSettings().saveClips)
+    }
+
+    @Test
+    fun keepDaysDefaults() {
+        // New installations keep one year ...
+        assertEquals(365, SleepSettings().keepDays)
+        // ... settings saved before the option existed keep everything, so an update deletes nothing.
+        assertEquals(0, SleepSettings.fromJson(JSONObject().put("mode", "ALWAYS")).keepDays)
+        val s = SleepSettings(keepDays = 90)
+        assertEquals(s, SleepSettings.fromJson(JSONObject(s.toJson().toString())))
+    }
+
+    @Test
+    fun expiredNightsByAge() {
+        val day = 24L * 60 * 60 * 1000
+        val now = 1_000 * day
+        val starts = listOf(now - 10 * day, now - 89 * day, now - 91 * day, now - 400 * day)
+        assertEquals(listOf(now - 91 * day, now - 400 * day), expiredNights(starts, 90, now))
+        assertEquals(listOf(now - 400 * day), expiredNights(starts, 365, now))
+        assertTrue(expiredNights(starts, 0, now).isEmpty())
     }
 
     @Test

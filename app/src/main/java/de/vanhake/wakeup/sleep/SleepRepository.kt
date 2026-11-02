@@ -1,6 +1,7 @@
 package de.vanhake.wakeup.sleep
 
 import android.content.Context
+import android.os.UserManager
 import android.util.Log
 import de.vanhake.wakeup.data.JsonFile
 import de.vanhake.wakeup.sleep.analysis.NightRecording
@@ -60,7 +61,14 @@ data class NightSummary(
     }
 }
 
-/** Settings, recorded nights and audio samples of the sleep analysis, all stored on the device only. */
+/**
+ * Settings, recorded nights and audio samples of the sleep analysis, all stored on the device only.
+ *
+ * The settings live in device-protected storage, because the automatic start is scheduled again
+ * right after a reboot, before the phone is unlocked. Nights, the running checkpoint and the audio
+ * samples are health data and live in the normal, credential-encrypted storage, which only opens
+ * after the first unlock. Until then [nights] is empty and nothing can be recorded.
+ */
 object SleepRepository {
     private const val TAG = "SleepRepository"
     /** Nights whose full recording (and so the detailed report) is kept. */
@@ -73,12 +81,19 @@ object SleepRepository {
     const val ANALYSIS_VERSION = 2
     const val CLIP_LIFETIME_MS = 24 * 60 * 60 * 1000L
 
+    private const val SLEEP_DIR = "sleep"
+    private const val SETTINGS_NAME = "settings.json"
+
     private lateinit var settingsFile: JsonFile
     private lateinit var indexFile: JsonFile
     private lateinit var checkpointFile: JsonFile
     private lateinit var appContext: Context
-    private lateinit var dir: File
     lateinit var clipDir: File
+        private set
+
+    /** Whether nights and samples have been loaded, i.e. the phone was unlocked since boot. */
+    @Volatile
+    var available = false
         private set
 
     private val _settings = MutableStateFlow(SleepSettings())
@@ -89,16 +104,22 @@ object SleepRepository {
     /** Newest first. */
     val nights: StateFlow<List<NightSummary>> = _nights.asStateFlow()
 
+    /**
+     * Loads the settings and, once the phone has been unlocked since boot, the nights. Safe to
+     * call repeatedly: a call after the unlock loads what a call before it had to leave out.
+     */
     @Synchronized
     fun init(context: Context) {
-        if (::settingsFile.isInitialized) return
+        if (!::settingsFile.isInitialized) initSettings(context)
+        if (!available && isUnlocked()) initPrivate()
+    }
+
+    private fun isUnlocked(): Boolean = appContext.getSystemService(UserManager::class.java).isUserUnlocked
+
+    private fun initSettings(context: Context) {
         appContext = context.applicationContext
-        val base = appContext.createDeviceProtectedStorageContext().filesDir
-        dir = File(base, "sleep").apply { mkdirs() }
-        clipDir = File(dir, "clips").apply { mkdirs() }
-        settingsFile = JsonFile(context, "sleep/settings.json")
-        indexFile = JsonFile(context, "sleep/index.json")
-        checkpointFile = JsonFile(context, "sleep/current.json")
+        File(JsonFile.baseDir(appContext, true), SLEEP_DIR).mkdirs()
+        settingsFile = JsonFile(appContext, "$SLEEP_DIR/$SETTINGS_NAME")
         _settings.value = settingsFile.read()?.let {
             try {
                 SleepSettings.fromJson(JSONObject(it))
@@ -107,6 +128,13 @@ object SleepRepository {
                 null
             }
         } ?: SleepSettings()
+    }
+
+    private fun initPrivate() {
+        migrateToCredentialStorage()
+        clipDir = File(File(JsonFile.baseDir(appContext, false), SLEEP_DIR), "clips").apply { mkdirs() }
+        indexFile = privateFile("index.json")
+        checkpointFile = privateFile("current.json")
         _nights.value = indexFile.read()?.let {
             try {
                 val arr = JSONArray(it)
@@ -116,17 +144,68 @@ object SleepRepository {
                 null
             }
         }.orEmpty()
+        available = true
+        // A night whose recording was killed is saved with the data recorded so far.
+        recoverCheckpoint()
+        pruneExpired()
+    }
+
+    private fun privateFile(name: String) = JsonFile(appContext, "$SLEEP_DIR/$name", deviceProtected = false)
+
+    /**
+     * Earlier versions kept nights and samples in device-protected storage. Moves them once into
+     * credential-encrypted storage. Copy and delete, because a rename between the two storages
+     * fails: they use different encryption keys.
+     */
+    private fun migrateToCredentialStorage() {
+        val old = File(JsonFile.baseDir(appContext, true), SLEEP_DIR)
+        val new = File(JsonFile.baseDir(appContext, false), SLEEP_DIR)
+        old.walkBottomUp().filter { it.isFile && !it.name.startsWith(SETTINGS_NAME) }.forEach { src ->
+            val dest = File(new, src.relativeTo(old).path)
+            try {
+                dest.parentFile?.mkdirs()
+                src.copyTo(dest, overwrite = true)
+                dest.setLastModified(src.lastModified()) // clips expire 24 h after they were written
+                src.delete()
+            } catch (e: Exception) {
+                Log.e(TAG, "Could not move ${src.name} to credential-encrypted storage", e)
+            }
+        }
+        old.walkBottomUp().filter { it.isDirectory && it != old }.forEach { it.delete() }
     }
 
     @Synchronized
     fun updateSettings(settings: SleepSettings) {
         settingsFile.write(settings.toJson().toString())
         _settings.value = settings
+        pruneExpired()
+    }
+
+    /** Deletes nights older than [SleepSettings.keepDays]. */
+    @Synchronized
+    fun pruneExpired(now: Long = System.currentTimeMillis()) {
+        if (!available) return
+        val expired = expiredNights(_nights.value.map { it.start }, _settings.value.keepDays, now).toSet()
+        if (expired.isEmpty()) return
+        expired.forEach { deleteFiles(it) }
+        saveIndex(_nights.value.filterNot { it.start in expired })
+    }
+
+    /** Deletes every recorded night and audio sample. The settings stay. */
+    @Synchronized
+    fun deleteAllNights() {
+        if (!available) return
+        File(JsonFile.baseDir(appContext, false), SLEEP_DIR).listFiles().orEmpty()
+            .filter { it.isFile && it.name.startsWith("night-") }
+            .forEach { it.delete() }
+        deleteAllClips()
+        saveIndex(emptyList())
     }
 
     /** Analyses and stores a finished night. Nights shorter than 10 minutes are discarded. */
     @Synchronized
     fun saveNight(night: NightRecording): NightSummary? {
+        if (!available) return null
         if (night.end - night.start < 10 * 60_000L) {
             night.clips.forEach { clipFile(it.file).delete() }
             return null
@@ -139,6 +218,7 @@ object SleepRepository {
         all.drop(MAX_DETAILED_NIGHTS).filter { nightFile(it.start).exists() }.forEach { deleteFiles(it.start) }
         all.drop(MAX_NIGHTS).forEach { deleteFiles(it.start) }
         saveIndex(all.take(MAX_NIGHTS))
+        pruneExpired()
         return summary
     }
 
@@ -156,6 +236,7 @@ object SleepRepository {
      * report (earlier versions analysed the unrounded data). Slow; call off the main thread.
      */
     fun refreshOutdatedSummaries() {
+        if (!available) return
         val outdated = _nights.value.filter { it.version < ANALYSIS_VERSION }
         if (outdated.isEmpty()) return
         val fresh = outdated.associate { old ->
@@ -166,7 +247,7 @@ object SleepRepository {
         }
     }
 
-    fun loadNight(start: Long): NightRecording? = nightFile(start).read()?.let {
+    fun loadNight(start: Long): NightRecording? = if (!available) null else nightFile(start).read()?.let {
         try {
             NightRecording.fromJson(JSONObject(it))
         } catch (e: Exception) {
@@ -177,6 +258,7 @@ object SleepRepository {
 
     @Synchronized
     fun deleteNight(start: Long) {
+        if (!available) return
         deleteFiles(start)
         saveIndex(_nights.value.filterNot { it.start == start })
     }
@@ -186,6 +268,7 @@ object SleepRepository {
 
     /** Stores the recording so far, so a night is not lost if the app gets killed. */
     fun writeCheckpoint(night: NightRecording) {
+        if (!available) return
         try {
             checkpointFile.write(night.toJson().toString())
         } catch (e: Exception) {
@@ -193,11 +276,14 @@ object SleepRepository {
         }
     }
 
-    fun clearCheckpoint() = checkpointFile.delete()
+    fun clearCheckpoint() {
+        if (available) checkpointFile.delete()
+    }
 
     /** Turns the checkpoint of a recording that was killed into a (shortened) night. */
     @Synchronized
     fun recoverCheckpoint() {
+        if (!available) return
         val json = checkpointFile.read() ?: return
         clearCheckpoint()
         try {
@@ -210,6 +296,7 @@ object SleepRepository {
     /** Deletes audio samples older than 24 hours; returns when the next one expires, or null. */
     @Synchronized
     fun deleteExpiredClips(now: Long = System.currentTimeMillis()): Long? {
+        if (!available) return null
         val files = clipDir.listFiles().orEmpty()
         var next: Long? = null
         for (f in files) {
@@ -224,10 +311,11 @@ object SleepRepository {
     }
 
     fun deleteAllClips() {
+        if (!available) return
         clipDir.listFiles().orEmpty().forEach { it.delete() }
     }
 
-    private fun nightFile(start: Long) = JsonFile(appContext, "sleep/night-$start.json")
+    private fun nightFile(start: Long) = privateFile("night-$start.json")
 
     private fun deleteFiles(start: Long) {
         loadNight(start)?.clips?.forEach { clipFile(it.file).delete() }

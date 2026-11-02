@@ -6,11 +6,20 @@ import androidx.core.util.AtomicFile
 import java.io.File
 import java.io.FileNotFoundException
 
-/** Atomically written JSON file in device-protected storage (readable before first unlock). */
-class JsonFile(context: Context, name: String) {
-    private val file = AtomicFile(
-        File(context.applicationContext.createDeviceProtectedStorageContext().filesDir, name),
-    )
+/**
+ * Atomically written JSON file. By default in device-protected storage (readable before the
+ * first unlock, needed for alarms); with [deviceProtected] = false in the normal,
+ * credential-encrypted storage that only opens after the user unlocked the phone.
+ */
+class JsonFile(context: Context, name: String, deviceProtected: Boolean = true) {
+    private val file = AtomicFile(File(baseDir(context, deviceProtected), name))
+
+    companion object {
+        fun baseDir(context: Context, deviceProtected: Boolean): File {
+            val app = context.applicationContext
+            return if (deviceProtected) app.createDeviceProtectedStorageContext().filesDir else app.filesDir
+        }
+    }
 
     /** File content, or null if it does not exist or cannot be read. */
     fun read(): String? = try {
