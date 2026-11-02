@@ -13,9 +13,8 @@ class WakeUpApp : Application() {
         AlarmRepository.init(this)
         Notifications.createChannels(this)
         SleepNotifications.createChannels(this)
+        // Also saves a night whose recording was killed (once the phone is unlocked).
         SleepRepository.init(this)
-        // A night whose recording was killed is saved with the data recorded so far.
-        SleepRepository.recoverCheckpoint()
         SleepScheduler.scheduleNextStart(this)
         Thread(SleepRepository::refreshOutdatedSummaries, "SleepSummaries").start()
     }

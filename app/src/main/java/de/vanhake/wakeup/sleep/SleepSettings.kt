@@ -26,6 +26,11 @@ data class SleepSettings(
      * Off by default: the samples can contain speech, also of other people in the room.
      */
     val saveClips: Boolean = false,
+    /**
+     * Nights older than this many days are deleted; 0 keeps them all.
+     * New installations keep one year; settings saved before this option existed keep everything.
+     */
+    val keepDays: Int = 365,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("mode", mode.name)
@@ -34,6 +39,7 @@ data class SleepSettings(
         put("endHour", endHour)
         put("endMinute", endMinute)
         put("saveClips", saveClips)
+        put("keepDays", keepDays)
     }
 
     companion object {
@@ -44,8 +50,27 @@ data class SleepSettings(
             endHour = o.optInt("endHour", 9),
             endMinute = o.optInt("endMinute", 0),
             saveClips = o.optBoolean("saveClips", false),
+            keepDays = o.optInt("keepDays", 0).coerceAtLeast(0),
         )
     }
+}
+
+/** Choices for [SleepSettings.keepDays], 0 = unlimited. */
+val KEEP_DAYS_OPTIONS = listOf(90, 365, 730, 0)
+
+fun keepDaysTitle(days: Int): String = when (days) {
+    0 -> "Immer"
+    90 -> "3 Monate"
+    365 -> "1 Jahr"
+    730 -> "2 Jahre"
+    else -> "$days Tage"
+}
+
+/** Start times of the nights that are older than [keepDays] at [now] and have to be deleted. */
+fun expiredNights(starts: List<Long>, keepDays: Int, now: Long): List<Long> {
+    if (keepDays <= 0) return emptyList()
+    val cutoff = now - keepDays * 24L * 60 * 60 * 1000
+    return starts.filter { it < cutoff }
 }
 
 /** An alarm ringing within this time after the start counts as "tonight's" alarm. */

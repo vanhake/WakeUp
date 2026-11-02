@@ -61,14 +61,17 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import de.vanhake.wakeup.sleep.KEEP_DAYS_OPTIONS
 import de.vanhake.wakeup.sleep.RecordingMode
 import de.vanhake.wakeup.sleep.SleepRepository
 import de.vanhake.wakeup.sleep.SleepScheduler
 import de.vanhake.wakeup.sleep.SleepSettings
 import de.vanhake.wakeup.sleep.SleepTrackingService
+import de.vanhake.wakeup.sleep.keepDaysTitle
 import de.vanhake.wakeup.ui.components.BigButton
 import de.vanhake.wakeup.ui.components.BigOutlinedButton
 import de.vanhake.wakeup.ui.components.SectionTitle
+import de.vanhake.wakeup.ui.theme.Danger
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -82,6 +85,7 @@ fun SleepScreen(onClose: () -> Unit, onOpenReport: (Long) -> Unit) {
     var refresh by remember { mutableIntStateOf(0) }
     var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     var editingTime by remember { mutableStateOf<TimeField?>(null) }
+    var confirmDeleteAll by remember { mutableStateOf(false) }
 
     val micLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         refresh++
@@ -99,6 +103,21 @@ fun SleepScreen(onClose: () -> Unit, onOpenReport: (Long) -> Unit) {
     fun update(new: SleepSettings) {
         SleepRepository.updateSettings(new)
         SleepScheduler.scheduleNextStart(context)
+    }
+
+    if (confirmDeleteAll) {
+        AlertDialog(
+            onDismissRequest = { confirmDeleteAll = false },
+            title = { Text("Alle Schlafdaten löschen?") },
+            text = { Text("Alle aufgezeichneten Nächte, Berichte und Hörproben werden gelöscht. Die Einstellungen bleiben.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    SleepRepository.deleteAllNights()
+                    confirmDeleteAll = false
+                }) { Text("Löschen", color = Danger) }
+            },
+            dismissButton = { TextButton(onClick = { confirmDeleteAll = false }) { Text("Abbrechen") } },
+        )
     }
 
     val micGranted = remember(lifecycleState == Lifecycle.State.RESUMED, refresh) { hasMic(context) }
@@ -249,6 +268,35 @@ fun SleepScreen(onClose: () -> Unit, onOpenReport: (Long) -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 24.dp),
             )
+
+            SectionTitle("Aufbewahrung")
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                KEEP_DAYS_OPTIONS.forEachIndexed { index, days ->
+                    SegmentedButton(
+                        selected = settings.keepDays == days,
+                        onClick = { update(settings.copy(keepDays = days)) },
+                        shape = SegmentedButtonDefaults.itemShape(index, KEEP_DAYS_OPTIONS.size),
+                        modifier = Modifier.height(56.dp),
+                    ) { Text(keepDaysTitle(days)) }
+                }
+            }
+            Text(
+                if (settings.keepDays == 0) {
+                    "Alle Nächte bleiben gespeichert, bis du sie löschst."
+                } else {
+                    "Nächte, die älter als ${keepDaysTitle(settings.keepDays)} sind, werden automatisch gelöscht."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp, bottom = 12.dp),
+            )
+            BigOutlinedButton(
+                text = "Alle Schlafdaten löschen",
+                onClick = { confirmDeleteAll = true },
+                modifier = Modifier.fillMaxWidth(),
+                contentColor = Danger,
+            )
+            Spacer(Modifier.height(24.dp))
         }
     }
 }

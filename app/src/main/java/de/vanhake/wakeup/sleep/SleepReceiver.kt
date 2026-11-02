@@ -25,6 +25,11 @@ class SleepReceiver : BroadcastReceiver() {
         SleepScheduler.scheduleNextStart(context)
         if (SleepTrackingService.recordingSince.value != null) return
         if (!shouldRecord(SleepRepository.settings.value, AlarmRepository.alarms.value, ZonedDateTime.now())) return
+        // Nights are stored in credential-encrypted storage, which opens with the first unlock.
+        if (!SleepRepository.available) {
+            SleepNotifications.showProblem(context, LOCKED_PROBLEM)
+            return
+        }
 
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             SleepNotifications.showProblem(context, "Das Mikrofon ist nicht erlaubt. Öffne WakeUp → Schlaf, um es zu erlauben.")

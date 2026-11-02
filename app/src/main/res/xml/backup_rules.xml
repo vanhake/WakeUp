@@ -2,4 +2,5 @@
 <!-- Android 11 und älter (Auto Backup): Schlafanalyse nicht sichern, siehe data_extraction_rules.xml. -->
 <full-backup-content>
     <exclude domain="device_file" path="sleep/" />
+    <exclude domain="file" path="sleep/" />
 </full-backup-content>

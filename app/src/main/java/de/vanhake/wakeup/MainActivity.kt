@@ -56,6 +56,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         AlarmRepository.init(this)
+        // Loads the nights if the process started before the first unlock (e.g. for an alarm after a reboot).
+        SleepRepository.init(this)
         handleIntent(intent)
         setContent {
             WakeUpTheme {

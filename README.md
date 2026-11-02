@@ -93,6 +93,14 @@ kommt ein neuer dazu. Oben rechts geht es zur Schlafanalyse (Mond) und zu den Ei
    (Im Bett, Einschlafdauer, Effizienz, Wachphasen, Unruhe, Schlummern) sowie Atmung und
    Schnarchen. Über den Papierkorb lässt sich die Nacht löschen.
 
+**Datenschutz der Schlafanalyse:** Aufnahmen werden nur auf dem Handy ausgewertet, nichts wird
+hochgeladen. Nächte, Berichte und Hörproben liegen im verschlüsselten App-Speicher, der sich erst
+mit dem ersten Entsperren nach einem Neustart öffnet; bis dahin startet auch keine Aufzeichnung.
+Sie sind vom Android-Cloud-Backup ausgeschlossen. Unter **Aufbewahrung** lässt sich festlegen,
+wie lange Nächte gespeichert bleiben (3 Monate, 1 Jahr, 2 Jahre oder immer; neue Installationen:
+1 Jahr), und **Alle Schlafdaten löschen** entfernt alle Nächte und Hörproben auf einmal.
+*Hörproben speichern* ist standardmäßig aus.
+
 ## Bauen & installieren
 
 Jeder Push baut per GitHub Actions eine Debug-APK (Tab **Actions** → letzter Lauf →

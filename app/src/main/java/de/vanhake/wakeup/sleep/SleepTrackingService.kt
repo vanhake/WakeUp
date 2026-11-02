@@ -137,6 +137,11 @@ class SleepTrackingService : Service() {
             shutDown()
             return START_NOT_STICKY
         }
+        if (!SleepRepository.available) {
+            SleepNotifications.showProblem(this, LOCKED_PROBLEM)
+            shutDown()
+            return START_NOT_STICKY
+        }
 
         deadline = recordingDeadline(SleepRepository.settings.value, AlarmRepository.alarms.value, ZonedDateTime.now())
         val interactive = getSystemService(PowerManager::class.java).isInteractive
