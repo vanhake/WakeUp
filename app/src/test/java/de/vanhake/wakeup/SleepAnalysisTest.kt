@@ -151,6 +151,39 @@ class SleepAnalysisTest {
     }
 
     @Test
+    fun snoozingIsShownSeparately() {
+        val n = night()
+        val firstRing = n.end - 30 * minute
+        // Snoozed twice; the phone was handled while it rang (screen on), dozing in between.
+        val r = SleepAnalyzer.analyze(
+            n.copy(
+                alarmRingAt = firstRing,
+                alarmDismissAt = n.end - 2 * minute,
+                snoozes = 2,
+                screen = n.screen +
+                    ScreenEvent(firstRing, true) + ScreenEvent(firstRing + minute, false) +
+                    ScreenEvent(n.end - 15 * minute, true) + ScreenEvent(n.end - 14 * minute, false),
+            ),
+        )
+        val ring = ((firstRing - n.start) / minute).toInt()
+        assertEquals(firstRing, r.wakeUp)
+        assertEquals(RestState.AWAKE, r.states[ring])
+        assertEquals(RestState.SNOOZE, r.states[ring + 5])
+        assertEquals(RestState.AWAKE, r.states[8 * 60 - 15])
+        assertEquals(RestState.AWAKE, r.states.last())
+        assertEquals(28 - 2, r.snoozeMinutes)
+        assertEquals(8 * 60 - 30 - 30, r.sleepMinutes)
+    }
+
+    @Test
+    fun scorePartsAddUp() {
+        val parts = SleepAnalyzer.scoreParts(6 * 60 + 28, 0.91f, 60, 3, 11)!!
+        assertEquals(77, parts.total)
+        assertEquals(1f, parts.latency, 0f)
+        assertEquals(0.5f, parts.awakenings, 0.001f)
+    }
+
+    @Test
     fun emptyNightHasNoSleep() {
         val r = SleepAnalyzer.analyze(
             NightRecording(0, 5 * minute, emptyList(), emptyList(), listOf(ScreenEvent(0, true))),
