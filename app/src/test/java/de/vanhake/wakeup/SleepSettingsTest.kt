@@ -58,6 +58,20 @@ class SleepSettingsTest {
     }
 
     @Test
+    fun skippedRingIsPassedOverOnce() {
+        // Friday 6:30 skipped; Thursday evening the next ring is Monday.
+        val alarm = workdays.copy(skippedRing = millis(23, 6, 30))
+        assertEquals(millis(26, 6, 30), nextRegularRing(alarm, at(22, 22, 0)))
+        assertTrue(alarm.isSkipping(millis(22, 22, 0)))
+        // After the skipped time the alarm rings as usual again.
+        assertEquals(millis(26, 6, 30), nextRegularRing(alarm, at(24, 12, 0)))
+        assertFalse(alarm.isSkipping(millis(24, 12, 0)))
+        assertEquals(millis(30, 6, 30), nextRegularRing(alarm, at(26, 7, 0)))
+        // No recording for the skipped morning.
+        assertFalse(shouldRecord(SleepSettings(mode = RecordingMode.WITH_ALARM), listOf(alarm), at(22, 22, 30)))
+    }
+
+    @Test
     fun settingsJsonRoundTrip() {
         val s = SleepSettings(RecordingMode.WITH_ALARM, 23, 15, 8, 45, saveClips = false)
         assertEquals(s, SleepSettings.fromJson(JSONObject(s.toJson().toString())))
