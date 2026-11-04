@@ -14,12 +14,15 @@ val CalmColor = Color(0xFF3B6FE0)
 val RestlessColor = Color(0xFF2FA39A)
 val AwakeColor = Color(0xFFD9692A)
 val SnoreColor = Color(0xFF9C6ADE)
+/** Neutral grey: dozing between alarms is neither sleep nor clearly awake. */
+val SnoozeColor = Color(0xFF8A909C)
 
 val RestState.color: Color
     get() = when (this) {
         RestState.CALM -> CalmColor
         RestState.RESTLESS -> RestlessColor
         RestState.AWAKE -> AwakeColor
+        RestState.SNOOZE -> SnoozeColor
     }
 
 val RestState.label: String
@@ -27,6 +30,7 @@ val RestState.label: String
         RestState.CALM -> "Ruhig"
         RestState.RESTLESS -> "Unruhig"
         RestState.AWAKE -> "Wach"
+        RestState.SNOOZE -> "Schlummern"
     }
 
 val ClipType.label: String

@@ -153,7 +153,9 @@ fun SleepTimeline(report: SleepReport, modifier: Modifier = Modifier) {
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            RestState.entries.forEach { LegendItem(it.color, it.label) }
+            RestState.entries
+                .filter { it != RestState.SNOOZE || report.snoozeMinutes > 0 }
+                .forEach { LegendItem(it.color, it.label) }
             LegendItem(SnoreColor, "Schnarchen")
             if (report.apneas.isNotEmpty()) LegendItem(Danger, "Atemaussetzer-Verdacht", round = true)
         }

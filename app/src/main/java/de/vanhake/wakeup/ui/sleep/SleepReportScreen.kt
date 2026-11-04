@@ -179,10 +179,14 @@ private fun ReportContent(night: NightRecording, report: SleepReport, modifier: 
                 "Aufwachen" to when {
                     night.alarmRingAt == null -> "ohne Wecker"
                     night.snoozes == 0 -> if (night.smartWake) "Smart Wake" else "sofort"
-                    else -> "${night.snoozes}× geschlummert"
+                    else -> "${night.snoozes}× geschlummert" +
+                        (if (report.snoozeMinutes > 0) ", ${formatDuration(report.snoozeMinutes)}" else "")
                 },
             ),
         )
+
+        SectionTitle("Schlafwert")
+        ScoreBreakdown(report)
 
         SectionTitle("Atmung & Schnarchen")
         StatGrid(
@@ -226,6 +230,9 @@ private fun ReportContent(night: NightRecording, report: SleepReport, modifier: 
                 ClipList(clips)
             }
         }
+
+        Spacer(Modifier.height(24.dp))
+        AnalysisExplanation(report)
 
         Text(
             "Hinweis: Die Schlafanalyse arbeitet mit Mikrofon" +

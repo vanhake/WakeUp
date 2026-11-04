@@ -3,7 +3,24 @@ package de.vanhake.wakeup.sleep.analysis
 import kotlin.math.ceil
 import kotlin.math.roundToInt
 
-enum class RestState { CALM, RESTLESS, AWAKE }
+/** [SNOOZE]: after the first alarm while snoozing, without signs of being awake. */
+enum class RestState { CALM, RESTLESS, AWAKE, SNOOZE }
+
+/** Parts of the score, each 0..1, weighted by [ScoreParts.WEIGHTS]. */
+data class ScoreParts(
+    val duration: Float,
+    val efficiency: Float,
+    val calm: Float,
+    val awakenings: Float,
+    val latency: Float,
+) {
+    val values: List<Float> get() = listOf(duration, efficiency, calm, awakenings, latency)
+    val total: Int get() = (100 * values.zip(WEIGHTS).fold(0f) { sum, (v, w) -> sum + w * v }).roundToInt()
+
+    companion object {
+        val WEIGHTS = listOf(0.40f, 0.20f, 0.15f, 0.15f, 0.10f)
+    }
+}
 
 /** Loud sound during sleep; [wokeUp] if restlessness or waking followed within 2 minutes. */
 data class Disturbance(val timeMs: Long, val aboveFloorDb: Float, val wokeUp: Boolean)
@@ -40,6 +57,9 @@ data class SleepReport(
     val breathingRate: Float?,
     val disturbances: List<Disturbance>,
     val score: Int,
+    val scoreParts: ScoreParts? = null,
+    /** Minutes between the first alarm and dismissing it while snoozing. */
+    val snoozeMinutes: Int = 0,
     /** Coughs during the sleep period (needs the sound classifier). */
     val coughs: Int = 0,
     /** Separate stretches of talking during sleep (needs the sound classifier). */
@@ -145,7 +165,22 @@ object SleepAnalyzer {
         if (onsetMinute != null) {
             for (m in 0 until onsetMinute) states[m] = RestState.AWAKE
         }
-        for (m in wakeMinute until n) states[m] = RestState.AWAKE
+        // While snoozing, minutes without screen use stay visible as dozing; the rest is awake.
+        val snoozeEnd = if (night.snoozes > 0 && night.alarmRingAt != null) {
+            val dismiss = night.alarmDismissAt ?: night.end
+            ((dismiss - start) / MINUTE).toInt().coerceIn(wakeMinute, n)
+        } else {
+            wakeMinute
+        }
+        var snoozeMinutes = 0
+        for (m in wakeMinute until n) {
+            if (m < snoozeEnd && states[m] != RestState.AWAKE && onsetMinute != null) {
+                states[m] = RestState.SNOOZE
+                snoozeMinutes++
+            } else {
+                states[m] = RestState.AWAKE
+            }
+        }
 
         val sleepRange = if (onsetMinute != null && wakeMinute > onsetMinute) onsetMinute until wakeMinute else IntRange.EMPTY
         val sleepMinutes = sleepRange.count { states[it] != RestState.AWAKE }
@@ -198,7 +233,8 @@ object SleepAnalyzer {
         val quiet = night.minutes.map { it.floorDb }.sorted().let { if (it.isEmpty()) 0f else it[it.size / 10] }
         val noise = List(n) { m -> night.minutes.getOrNull(m)?.let { (it.avgDb - quiet).coerceAtLeast(0f) } ?: 0f }
 
-        val score = score(sleepMinutes, efficiency, restlessMinutes, awakenings, latency)
+        val parts = scoreParts(sleepMinutes, efficiency, restlessMinutes, awakenings, latency)
+        val score = parts?.total ?: 0
 
         fun inSleepRange(relMs: Long) = (relMs / MINUTE).toInt() in sleepRange
         val coughs = bursts.count { classification.typeOf(it) == SoundType.COUGH && inSleepRange(it.startMs) }
@@ -234,6 +270,8 @@ object SleepAnalyzer {
             breathingRate = breathingRate,
             disturbances = disturbances,
             score = score,
+            scoreParts = parts,
+            snoozeMinutes = snoozeMinutes,
             coughs = coughs,
             sleepTalkEpisodes = talkEpisodes,
             lightsOff = lightsOff,
@@ -243,8 +281,11 @@ object SleepAnalyzer {
     }
 
     /** 0–100 from duration, efficiency, restlessness, awakenings and time to fall asleep. */
-    fun score(sleepMinutes: Int, efficiency: Float, restlessMinutes: Int, awakenings: Int, latency: Int?): Int {
-        if (sleepMinutes <= 0) return 0
+    fun score(sleepMinutes: Int, efficiency: Float, restlessMinutes: Int, awakenings: Int, latency: Int?): Int =
+        scoreParts(sleepMinutes, efficiency, restlessMinutes, awakenings, latency)?.total ?: 0
+
+    fun scoreParts(sleepMinutes: Int, efficiency: Float, restlessMinutes: Int, awakenings: Int, latency: Int?): ScoreParts? {
+        if (sleepMinutes <= 0) return null
         val hours = sleepMinutes / 60f
         val duration = when {
             hours < 7f -> ((hours - 3f) / 4f).coerceIn(0f, 1f)
@@ -255,7 +296,7 @@ object SleepAnalyzer {
         val rest = (1f - restlessMinutes.toFloat() / sleepMinutes / 0.3f).coerceIn(0f, 1f)
         val wake = (1f - awakenings / 6f).coerceIn(0f, 1f)
         val lat = latency?.let { if (it <= 20) 1f else (1f - (it - 20) / 40f).coerceIn(0f, 1f) } ?: 1f
-        return (100 * (0.40f * duration + 0.20f * eff + 0.15f * rest + 0.15f * wake + 0.10f * lat)).roundToInt()
+        return ScoreParts(duration, eff, rest, wake, lat)
     }
 
     /** Last switch from a lit room to darkness before minute [before]. */
