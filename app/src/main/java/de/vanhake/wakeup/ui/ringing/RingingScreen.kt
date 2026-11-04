@@ -52,6 +52,7 @@ import java.time.format.DateTimeFormatter
 fun RingingRoute(onSolved: (night: Long?) -> Unit) {
     val context = LocalContext.current
     val ringingId by AlarmService.ringingAlarmId.collectAsState()
+    val endingEarly by AlarmService.endingEarly.collectAsState()
     val alarms by AlarmRepository.alarms.collectAsState()
     val alarm = alarms.firstOrNull { it.id == ringingId } ?: return
     RingingScreen(
@@ -64,6 +65,7 @@ fun RingingRoute(onSolved: (night: Long?) -> Unit) {
             onSolved(night)
         },
         onChallengeActive = { AlarmService.setQuiet(context, it) },
+        startInChallenge = endingEarly,
     )
 }
 
@@ -76,8 +78,10 @@ fun RingingScreen(
     onSnooze: () -> Unit,
     onSolved: () -> Unit,
     onChallengeActive: (Boolean) -> Unit,
+    startInChallenge: Boolean = false,
 ) {
-    var inChallenge by remember { mutableStateOf(false) }
+    // Ending a snoozed alarm early starts with the task; leaving it makes the alarm ring.
+    var inChallenge by remember { mutableStateOf(startInChallenge) }
     var confirmStop by remember { mutableStateOf(false) }
     var lastInteraction by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val currentOnChallengeActive by rememberUpdatedState(onChallengeActive)
@@ -85,7 +89,7 @@ fun RingingScreen(
     val quietDuringChallenge = alarm.challenge != ChallengeType.BARCODE
 
     LaunchedEffect(inChallenge) {
-        if (quietDuringChallenge) currentOnChallengeActive(inChallenge)
+        if (quietDuringChallenge || startInChallenge) currentOnChallengeActive(inChallenge)
     }
     LaunchedEffect(inChallenge, lastInteraction) {
         if (inChallenge) {

@@ -160,7 +160,7 @@ fun BarcodeChallenge(
         },
         footer = {
             TextButton(onClick = onEmergency) {
-                Text("Code nicht greifbar? Notfall-Aufgaben lösen")
+                Text("Code nicht greifbar? Ausweich-Aufgabe lösen")
             }
         },
     )

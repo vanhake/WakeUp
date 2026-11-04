@@ -81,6 +81,9 @@ class MainActivity : ComponentActivity() {
         }
         intent?.removeExtra(EXTRA_AFTER_ALARM)
         intent?.removeExtra(EXTRA_NIGHT)
+        val endSnooze = intent?.getIntExtra(EXTRA_END_SNOOZE, -1) ?: -1
+        if (endSnooze >= 0) AlarmService.endSnooze(this, endSnooze)
+        intent?.removeExtra(EXTRA_END_SNOOZE)
     }
 
     /** The app opened after a solved alarm; [night] is the sleep recording that ended with it. */
@@ -90,12 +93,19 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_SLEEP_REPORT = "sleep_report"
         private const val EXTRA_AFTER_ALARM = "after_alarm"
         private const val EXTRA_NIGHT = "night"
+        private const val EXTRA_END_SNOOZE = "end_snooze"
 
         /** Sleep report to open, set when the app is opened from the report notification. */
         val openReport = MutableStateFlow<Long?>(null)
 
         /** Set when the app is opened by the ringing screen after the challenge was solved. */
         val afterAlarm = MutableStateFlow<AfterAlarm?>(null)
+
+        /** Opens the app and ends the snoozed alarm [alarmId] early (the task has to be solved). */
+        fun endSnoozeIntent(context: Context, alarmId: Int): Intent =
+            Intent(context, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .putExtra(EXTRA_END_SNOOZE, alarmId)
 
         fun afterAlarmIntent(context: Context, night: Long?): Intent =
             Intent(context, MainActivity::class.java)
