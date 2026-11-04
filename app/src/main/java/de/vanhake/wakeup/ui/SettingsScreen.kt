@@ -35,6 +35,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -57,6 +60,7 @@ import de.vanhake.wakeup.data.Alarm
 import de.vanhake.wakeup.data.AlarmRepository
 import de.vanhake.wakeup.data.BarcodeRepository
 import de.vanhake.wakeup.data.ChallengeType
+import de.vanhake.wakeup.data.FallbackChallenge
 import de.vanhake.wakeup.data.SavedBarcode
 import de.vanhake.wakeup.ui.challenge.BarcodeScanPane
 import de.vanhake.wakeup.ui.components.BigButton
@@ -199,6 +203,9 @@ fun SettingsScreen(onClose: () -> Unit) {
             Spacer(Modifier.height(20.dp))
             BigButton(text = "Barcode hinzufügen", icon = Icons.Filled.QrCodeScanner, onClick = { adding = true })
 
+            SectionTitle("Ausweich-Aufgabe")
+            FallbackSettings()
+
             SectionTitle("Über")
             Text(
                 "WakeUp ${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})",
@@ -208,6 +215,54 @@ fun SettingsScreen(onClose: () -> Unit) {
             Spacer(Modifier.height(24.dp))
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FallbackSettings() {
+    val fallback by AlarmRepository.fallback.collectAsState()
+    Text(
+        "Ist der Barcode nicht greifbar, beendest du den Wecker stattdessen mit dieser Aufgabe. Sie gilt " +
+            "auch, wenn ein Barcode gelöscht wurde.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Spacer(Modifier.height(16.dp))
+    val options = FallbackChallenge.entries
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        options.forEachIndexed { index, option ->
+            SegmentedButton(
+                selected = fallback == option,
+                onClick = { AlarmRepository.setFallback(option) },
+                shape = SegmentedButtonDefaults.itemShape(index, options.size),
+                modifier = Modifier.height(56.dp),
+            ) {
+                Text(
+                    when (option) {
+                        FallbackChallenge.MATH_EASY -> "Leicht"
+                        FallbackChallenge.MATH_MEDIUM -> "Mittel"
+                        FallbackChallenge.MATH_HARD -> "Schwer"
+                        FallbackChallenge.SHAKE -> "Schütteln"
+                    },
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            }
+        }
+    }
+    Text(
+        when (fallback) {
+            FallbackChallenge.SHAKE -> "${FallbackChallenge.SHAKE_COUNT}× schütteln (ohne Bewegungssensor: Rechnen schwer)."
+            else -> "${FallbackChallenge.MATH_COUNT} Aufgaben, " + when (fallback) {
+                FallbackChallenge.MATH_EASY -> "z. B. 47 + 38."
+                FallbackChallenge.MATH_MEDIUM -> "z. B. 14 × 7 + 36."
+                else -> "z. B. 23 × 8 + 17 × 6."
+            }
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 6.dp),
+    )
 }
 
 @Composable

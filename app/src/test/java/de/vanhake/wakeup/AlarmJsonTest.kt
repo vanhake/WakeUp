@@ -2,6 +2,7 @@ package de.vanhake.wakeup
 
 import de.vanhake.wakeup.data.Alarm
 import de.vanhake.wakeup.data.ChallengeType
+import de.vanhake.wakeup.data.FallbackChallenge
 import de.vanhake.wakeup.data.MathDifficulty
 import de.vanhake.wakeup.data.SavedBarcode
 import org.junit.Assert.assertEquals
@@ -24,6 +25,15 @@ class AlarmJsonTest {
             Alarm(id = 3, challenge = ChallengeType.NONE),
         )
         assertEquals(alarms, Alarm.listFromJson(Alarm.listToJson(alarms)))
+    }
+
+    @Test
+    fun fallbackChallengeFromName() {
+        assertEquals(FallbackChallenge.SHAKE, FallbackChallenge.fromName("SHAKE"))
+        assertEquals(FallbackChallenge.MATH_HARD, FallbackChallenge.fromName(null))
+        assertEquals(FallbackChallenge.MATH_HARD, FallbackChallenge.fromName("UNKNOWN"))
+        assertEquals(MathDifficulty.EASY, FallbackChallenge.MATH_EASY.mathDifficulty)
+        assertEquals(null, FallbackChallenge.SHAKE.mathDifficulty)
     }
 
     @Test

@@ -10,6 +10,7 @@ import androidx.core.app.NotificationCompat
 import de.vanhake.wakeup.MainActivity
 import de.vanhake.wakeup.R
 import de.vanhake.wakeup.data.Alarm
+import de.vanhake.wakeup.data.ChallengeType
 import de.vanhake.wakeup.ui.ringing.AlarmActivity
 import java.time.Instant
 import java.time.ZoneId
@@ -20,6 +21,7 @@ object Notifications {
     const val CHANNEL_SNOOZE = "snooze"
     const val ID_RINGING = 1
     private const val ID_SNOOZE_BASE = 1000
+    private const val REQUEST_END_SNOOZE_BASE = 2000
 
     fun createChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
@@ -77,6 +79,15 @@ object Notifications {
             .setContentIntent(
                 PendingIntent.getActivity(
                     context, 0, Intent(context, MainActivity::class.java),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                ),
+            )
+            .addAction(
+                0,
+                if (alarm.challenge == ChallengeType.NONE) "Jetzt beenden" else "Jetzt beenden (Aufgabe lösen)",
+                PendingIntent.getActivity(
+                    context, REQUEST_END_SNOOZE_BASE + alarm.id,
+                    MainActivity.endSnoozeIntent(context, alarm.id),
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
                 ),
             )

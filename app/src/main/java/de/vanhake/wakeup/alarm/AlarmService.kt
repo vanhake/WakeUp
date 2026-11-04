@@ -38,12 +38,16 @@ class AlarmService : Service() {
     private var originalVolume: Int? = null
     private var current: Alarm? = null
 
+    /** Started silently because the user ends a snoozed alarm early; loud again once abandoned. */
+    private var silent = false
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         AlarmRepository.init(this)
         when (intent?.action) {
             ACTION_FIRE -> onFire(intent.getIntExtra(AlarmReceiver.EXTRA_ALARM_ID, -1))
+            ACTION_END_SNOOZE -> onFire(intent.getIntExtra(AlarmReceiver.EXTRA_ALARM_ID, -1), early = true)
             ACTION_SNOOZE -> onSnooze()
             ACTION_DISMISS -> onDismiss()
             ACTION_QUIET -> setQuiet(intent.getBooleanExtra(EXTRA_QUIET, false))
@@ -52,7 +56,8 @@ class AlarmService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun onFire(alarmId: Int) {
+    /** [early]: the user ends a snoozed alarm before it rings again and goes straight to the task. */
+    private fun onFire(alarmId: Int, early: Boolean = false) {
         val alarm = AlarmRepository.get(alarmId)
         // startForegroundService() obliges us to call startForeground() in every case.
         goForeground(alarm ?: current)
@@ -65,7 +70,7 @@ class AlarmService : Service() {
             }
             return
         }
-        if (alarm == null || !alarm.enabled) {
+        if (alarm == null || !alarm.enabled || (early && !alarm.isSnoozed())) {
             stopEverything()
             return
         }
@@ -91,10 +96,14 @@ class AlarmService : Service() {
             )
         }
         current = updated
+        silent = early
+        _endingEarly.value = early
         _ringingAlarmId.value = updated.id
         startRinging(updated)
         SleepTrackingService.alarmRinging()
 
+        // Ending early is started from the open app, which shows the task itself.
+        if (early) return
         try {
             startActivity(
                 Intent(this, AlarmActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
@@ -170,7 +179,11 @@ class AlarmService : Service() {
         }
 
         player = createPlayer(alarm)
-        if (alarm.vibrate) startVibration()
+        if (silent) {
+            player?.setVolume(0f, 0f)
+        } else if (alarm.vibrate) {
+            startVibration()
+        }
     }
 
     private fun createPlayer(alarm: Alarm): MediaPlayer? {
@@ -221,7 +234,8 @@ class AlarmService : Service() {
     /** Lowers the sound while the user is working on the challenge. */
     private fun setQuiet(quiet: Boolean) {
         val alarm = current ?: return
-        val level = if (quiet) 0.15f else 1f
+        if (!quiet) silent = false
+        val level = if (quiet) (if (silent) 0f else 0.15f) else 1f
         player?.setVolume(level, level)
         if (alarm.vibrate) {
             if (quiet) vibrator?.cancel() else startVibration()
@@ -250,6 +264,8 @@ class AlarmService : Service() {
         wakeLock?.takeIf { it.isHeld }?.release()
         wakeLock = null
         current = null
+        silent = false
+        _endingEarly.value = false
         _ringingAlarmId.value = null
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -266,6 +282,7 @@ class AlarmService : Service() {
         private const val ACTION_SNOOZE = "de.vanhake.wakeup.service.SNOOZE"
         private const val ACTION_DISMISS = "de.vanhake.wakeup.service.DISMISS"
         private const val ACTION_QUIET = "de.vanhake.wakeup.service.QUIET"
+        private const val ACTION_END_SNOOZE = "de.vanhake.wakeup.service.END_SNOOZE"
         private const val EXTRA_QUIET = "quiet"
 
         private val _ringingAlarmId = MutableStateFlow<Int?>(null)
@@ -273,11 +290,26 @@ class AlarmService : Service() {
         /** Id of the alarm that is currently ringing, null if none. */
         val ringingAlarmId: StateFlow<Int?> = _ringingAlarmId.asStateFlow()
 
+        private val _endingEarly = MutableStateFlow(false)
+
+        /** The ringing alarm was a snoozed one the user chose to end early: go straight to the task. */
+        val endingEarly: StateFlow<Boolean> = _endingEarly.asStateFlow()
+
         fun fire(context: Context, alarmId: Int) {
             ContextCompat.startForegroundService(
                 context,
                 Intent(context, AlarmService::class.java)
                     .setAction(ACTION_FIRE)
+                    .putExtra(AlarmReceiver.EXTRA_ALARM_ID, alarmId),
+            )
+        }
+
+        /** Ends a snoozed alarm before it rings again: the task opens right away, without sound. */
+        fun endSnooze(context: Context, alarmId: Int) {
+            ContextCompat.startForegroundService(
+                context,
+                Intent(context, AlarmService::class.java)
+                    .setAction(ACTION_END_SNOOZE)
                     .putExtra(AlarmReceiver.EXTRA_ALARM_ID, alarmId),
             )
         }

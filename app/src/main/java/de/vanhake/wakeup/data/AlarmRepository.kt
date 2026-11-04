@@ -24,6 +24,12 @@ object AlarmRepository {
     /** Template for new alarms, set in the settings; its id is unused. */
     val defaults: StateFlow<Alarm> = _defaults.asStateFlow()
 
+    private lateinit var settingsFile: JsonFile
+    private val _fallback = MutableStateFlow(FallbackChallenge.DEFAULT)
+
+    /** Task used when the barcode can't be scanned; chosen in the settings. */
+    val fallback: StateFlow<FallbackChallenge> = _fallback.asStateFlow()
+
     @Synchronized
     fun init(context: Context) {
         if (::file.isInitialized) return
@@ -34,6 +40,14 @@ object AlarmRepository {
                 _defaults.value = Alarm.fromJson(JSONObject(it))
             } catch (e: Exception) {
                 Log.e(TAG, "Could not parse alarm defaults", e)
+            }
+        }
+        settingsFile = JsonFile(context, "alarm_settings.json")
+        settingsFile.read()?.let {
+            try {
+                _fallback.value = FallbackChallenge.fromName(JSONObject(it).optString("fallback"))
+            } catch (e: Exception) {
+                Log.e(TAG, "Could not parse alarm settings", e)
             }
         }
         file = JsonFile(context, "alarms.json")
@@ -75,6 +89,12 @@ object AlarmRepository {
         val defaults = alarm.copy(id = 0, enabled = true, snoozesUsed = 0, snoozedUntil = null, smartWakeTarget = null, skippedRing = null)
         defaultsFile.write(defaults.toJson().toString())
         _defaults.value = defaults
+    }
+
+    @Synchronized
+    fun setFallback(fallback: FallbackChallenge) {
+        settingsFile.write(JSONObject().put("fallback", fallback.name).toString())
+        _fallback.value = fallback
     }
 
     @Synchronized

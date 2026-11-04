@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Snooze
 import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -65,11 +66,13 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import de.vanhake.wakeup.alarm.AlarmScheduler
+import de.vanhake.wakeup.alarm.AlarmService
 import de.vanhake.wakeup.alarm.formatCountdown
 import de.vanhake.wakeup.alarm.formatDays
 import de.vanhake.wakeup.alarm.shortDayName
 import de.vanhake.wakeup.data.Alarm
 import de.vanhake.wakeup.data.AlarmRepository
+import de.vanhake.wakeup.data.ChallengeType
 import de.vanhake.wakeup.sleep.SleepRepository
 import de.vanhake.wakeup.sleep.SleepTrackingService
 import de.vanhake.wakeup.ui.sleep.formatDuration
@@ -95,6 +98,7 @@ fun AlarmListScreen(
     var now by remember { mutableStateOf(ZonedDateTime.now()) }
     // Alarm just switched off, for which "skip only once" is offered for a few seconds.
     var offerSkip by remember { mutableStateOf<Int?>(null) }
+    var endingSnoozed by remember { mutableStateOf<Alarm?>(null) }
     LaunchedEffect(offerSkip) {
         if (offerSkip != null) {
             delay(SKIP_OFFER_MS)
@@ -106,6 +110,17 @@ fun AlarmListScreen(
             now = ZonedDateTime.now()
             delay(15_000)
         }
+    }
+
+    endingSnoozed?.let { alarm ->
+        EndSnoozeDialog(
+            alarm = alarm,
+            onConfirm = {
+                endingSnoozed = null
+                AlarmService.endSnooze(context, alarm.id)
+            },
+            onDismiss = { endingSnoozed = null },
+        )
     }
 
     Scaffold(
@@ -141,7 +156,7 @@ fun AlarmListScreen(
                     now = now,
                     onClick = {
                         if (alarm.isSnoozed()) {
-                            Toast.makeText(context, "Der Wecker schlummert – beende ihn über die Aufgabe.", Toast.LENGTH_SHORT).show()
+                            endingSnoozed = alarm
                         } else {
                             onEdit(alarm)
                         }
@@ -177,6 +192,27 @@ fun AlarmListScreen(
             }
         }
     }
+}
+
+@Composable
+private fun EndSnoozeDialog(alarm: Alarm, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val withTask = alarm.challenge != ChallengeType.NONE
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Wecker jetzt beenden?") },
+        text = {
+            Text(
+                if (withTask) {
+                    "Du musst nicht warten, bis er wieder klingelt: Löse jetzt die Aufgabe (${alarm.challenge.title}). " +
+                        "Brichst du ab, klingelt der Wecker."
+                } else {
+                    "Der Wecker klingelt dann nicht mehr."
+                },
+            )
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text(if (withTask) "Aufgabe lösen" else "Beenden") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Weiter schlummern") } },
+    )
 }
 
 @Composable
@@ -315,7 +351,15 @@ private fun AlarmCard(
                         )
                     }
                 }
-                if (showSkipOffer) {
+                if (snoozed) {
+                    Spacer(Modifier.height(10.dp))
+                    Pill(
+                        "Jetzt beenden",
+                        MaterialTheme.colorScheme.primary,
+                        MaterialTheme.colorScheme.onPrimary,
+                        onClick,
+                    )
+                } else if (showSkipOffer) {
                     Spacer(Modifier.height(10.dp))
                     Pill(
                         "Nochmal tippen, um nur einmal auszuschalten",
