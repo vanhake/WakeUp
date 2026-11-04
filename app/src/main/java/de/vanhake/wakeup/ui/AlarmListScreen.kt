@@ -13,6 +13,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -40,6 +42,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -64,6 +67,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import de.vanhake.wakeup.alarm.AlarmScheduler
 import de.vanhake.wakeup.alarm.formatCountdown
 import de.vanhake.wakeup.alarm.formatDays
+import de.vanhake.wakeup.alarm.shortDayName
 import de.vanhake.wakeup.data.Alarm
 import de.vanhake.wakeup.data.AlarmRepository
 import de.vanhake.wakeup.sleep.SleepRepository
@@ -89,6 +93,14 @@ fun AlarmListScreen(
     val context = LocalContext.current
     val alarms by AlarmRepository.alarms.collectAsState()
     var now by remember { mutableStateOf(ZonedDateTime.now()) }
+    // Alarm just switched off, for which "skip only once" is offered for a few seconds.
+    var offerSkip by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(offerSkip) {
+        if (offerSkip != null) {
+            delay(SKIP_OFFER_MS)
+            offerSkip = null
+        }
+    }
     LaunchedEffect(Unit) {
         while (true) {
             now = ZonedDateTime.now()
@@ -135,10 +147,31 @@ fun AlarmListScreen(
                         }
                     },
                     onToggle = { enabled ->
-                        val updated = alarm.copy(enabled = enabled, snoozesUsed = 0, snoozedUntil = null)
+                        val updated = alarm.copy(enabled = enabled, snoozesUsed = 0, snoozedUntil = null, skippedRing = null)
                         AlarmRepository.upsert(updated)
                         AlarmScheduler.schedule(context, updated)
                         if (enabled) toastNextRing(context, updated)
+                        offerSkip = if (!enabled && alarm.isRepeating) alarm.id else null
+                    },
+                    showSkipOffer = offerSkip == alarm.id && !alarm.enabled,
+                    onSkipOnce = {
+                        val base = alarm.copy(enabled = true, snoozesUsed = 0, snoozedUntil = null, skippedRing = null)
+                        val ring = AlarmScheduler.nextRegularTrigger(base)
+                        val updated = base.copy(skippedRing = ring)
+                        AlarmRepository.upsert(updated)
+                        AlarmScheduler.schedule(context, updated)
+                        offerSkip = null
+                        Toast.makeText(
+                            context,
+                            "Fällt ${formatRing(ring)} einmal aus, danach klingelt er wieder",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    },
+                    onUndoSkip = {
+                        val updated = alarm.copy(skippedRing = null)
+                        AlarmRepository.upsert(updated)
+                        AlarmScheduler.schedule(context, updated)
+                        toastNextRing(context, updated)
                     },
                 )
             }
@@ -221,8 +254,17 @@ private fun EmptyState(onCreate: () -> Unit) {
 }
 
 @Composable
-private fun AlarmCard(alarm: Alarm, now: ZonedDateTime, onClick: () -> Unit, onToggle: (Boolean) -> Unit) {
+private fun AlarmCard(
+    alarm: Alarm,
+    now: ZonedDateTime,
+    onClick: () -> Unit,
+    onToggle: (Boolean) -> Unit,
+    showSkipOffer: Boolean,
+    onSkipOnce: () -> Unit,
+    onUndoSkip: () -> Unit,
+) {
     val snoozed = alarm.isSnoozed(now.toInstant().toEpochMilli())
+    val skipping = !snoozed && alarm.isSkipping(now.toInstant().toEpochMilli())
     val active = alarm.enabled
     val faded = if (active) Color.Unspecified else MaterialTheme.colorScheme.onSurfaceVariant
     Card(
@@ -273,6 +315,23 @@ private fun AlarmCard(alarm: Alarm, now: ZonedDateTime, onClick: () -> Unit, onT
                         )
                     }
                 }
+                if (showSkipOffer) {
+                    Spacer(Modifier.height(10.dp))
+                    Pill(
+                        "Nochmal tippen, um nur einmal auszuschalten",
+                        MaterialTheme.colorScheme.primaryContainer,
+                        MaterialTheme.colorScheme.onPrimaryContainer,
+                        onSkipOnce,
+                    )
+                } else if (skipping) {
+                    Spacer(Modifier.height(10.dp))
+                    Pill(
+                        "Fällt ${formatRing(alarm.skippedRing!!)} aus · Rückgängig",
+                        MaterialTheme.colorScheme.secondaryContainer,
+                        MaterialTheme.colorScheme.onSecondaryContainer,
+                        onUndoSkip,
+                    )
+                }
             }
             Switch(
                 checked = active,
@@ -280,6 +339,31 @@ private fun AlarmCard(alarm: Alarm, now: ZonedDateTime, onClick: () -> Unit, onT
                 enabled = !snoozed,
                 modifier = Modifier.scale(1.35f).padding(start = 8.dp),
             )
+        }
+    }
+}
+
+private const val SKIP_OFFER_MS = 6_000L
+
+private val DAY_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("d.M.")
+
+/** "Mo 10.11., 07:00" */
+private fun formatRing(millis: Long): String {
+    val t = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault())
+    return "${shortDayName(t.dayOfWeek)} ${DAY_FORMAT.format(t)}, ${TIME_FORMAT.format(t)}"
+}
+
+@Composable
+private fun Pill(text: String, container: Color, content: Color, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(50),
+        color = container,
+        contentColor = content,
+        modifier = Modifier.heightIn(min = 40.dp),
+    ) {
+        Box(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), contentAlignment = Alignment.CenterStart) {
+            Text(text, style = MaterialTheme.typography.labelLarge)
         }
     }
 }

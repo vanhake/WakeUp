@@ -72,7 +72,7 @@ object AlarmRepository {
 
     @Synchronized
     fun saveDefaults(alarm: Alarm) {
-        val defaults = alarm.copy(id = 0, enabled = true, snoozesUsed = 0, snoozedUntil = null, smartWakeTarget = null)
+        val defaults = alarm.copy(id = 0, enabled = true, snoozesUsed = 0, snoozedUntil = null, smartWakeTarget = null, skippedRing = null)
         defaultsFile.write(defaults.toJson().toString())
         _defaults.value = defaults
     }

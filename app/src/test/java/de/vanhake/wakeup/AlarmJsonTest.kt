@@ -19,7 +19,7 @@ class AlarmJsonTest {
                 challenge = ChallengeType.BARCODE, mathDifficulty = MathDifficulty.HARD, mathCount = 5,
                 shakeCount = 80, barcodeId = 3, maxSnoozes = 0, snoozeMinutes = 9,
                 vibrate = false, volume = 0.5f, ringtoneUri = "content://media/internal/audio/media/12",
-                snoozesUsed = 1, snoozedUntil = 1_793_000_000_000L,
+                snoozesUsed = 1, snoozedUntil = 1_793_000_000_000L, skippedRing = 1_793_100_000_000L,
             ),
             Alarm(id = 3, challenge = ChallengeType.NONE),
         )

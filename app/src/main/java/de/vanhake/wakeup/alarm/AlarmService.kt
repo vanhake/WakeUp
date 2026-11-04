@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.time.ZonedDateTime
+import kotlin.math.abs
 import kotlin.math.ceil
 
 /** Foreground service that rings until the alarm is snoozed or its challenge is solved. */
@@ -65,6 +66,14 @@ class AlarmService : Service() {
             return
         }
         if (alarm == null || !alarm.enabled) {
+            stopEverything()
+            return
+        }
+
+        val skipped = alarm.skippedRing
+        if (!alarm.isSnoozed() && skipped != null && abs(System.currentTimeMillis() - skipped) < 2 * 60_000L) {
+            // Skipped once by the user (in case the old ring time was still registered).
+            AlarmScheduler.schedule(this, alarm)
             stopEverything()
             return
         }

@@ -42,12 +42,18 @@ data class Alarm(
     val snoozedUntil: Long? = null,
     /** Regular ring time that a smart wake-up already replaced; it is skipped when rescheduling. */
     val smartWakeTarget: Long? = null,
+    /** Regular ring time the user chose to skip once; the alarm stays on for the rings after it. */
+    val skippedRing: Long? = null,
 ) {
     val isRepeating: Boolean get() = days.isNotEmpty()
     val snoozesLeft: Int get() = (maxSnoozes - snoozesUsed).coerceAtLeast(0)
 
     fun isSnoozed(now: Long = System.currentTimeMillis()): Boolean =
         snoozedUntil != null && snoozedUntil > now
+
+    /** A ring time is being skipped once and has not passed yet. */
+    fun isSkipping(now: Long = System.currentTimeMillis()): Boolean =
+        enabled && skippedRing != null && skippedRing > now
 
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
@@ -70,6 +76,7 @@ data class Alarm(
         put("snoozesUsed", snoozesUsed)
         snoozedUntil?.let { put("snoozedUntil", it) }
         smartWakeTarget?.let { put("smartWakeTarget", it) }
+        skippedRing?.let { put("skippedRing", it) }
     }
 
     companion object {
@@ -97,6 +104,7 @@ data class Alarm(
                 snoozesUsed = o.optInt("snoozesUsed", 0),
                 snoozedUntil = if (o.has("snoozedUntil")) o.getLong("snoozedUntil") else null,
                 smartWakeTarget = if (o.has("smartWakeTarget")) o.getLong("smartWakeTarget") else null,
+                skippedRing = if (o.has("skippedRing")) o.getLong("skippedRing") else null,
             )
         }
 

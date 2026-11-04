@@ -337,7 +337,7 @@ private fun save(context: Context, alarm: Alarm, onClose: () -> Unit) {
         Toast.makeText(context, "Bitte zuerst einen Barcode auswählen", Toast.LENGTH_SHORT).show()
         return
     }
-    val saved = alarm.copy(enabled = true, snoozesUsed = 0, snoozedUntil = null, smartWakeTarget = null)
+    val saved = alarm.copy(enabled = true, snoozesUsed = 0, snoozedUntil = null, smartWakeTarget = null, skippedRing = null)
     AlarmRepository.upsert(saved)
     AlarmScheduler.schedule(context, saved)
     toastNextRing(context, saved)

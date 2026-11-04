@@ -25,7 +25,10 @@ fun nextTrigger(hour: Int, minute: Int, days: Set<DayOfWeek>, now: ZonedDateTime
     error("unreachable: a matching day exists within 8 days")
 }
 
-/** Next regular ring time of [alarm]; a ring time already replaced by a smart wake-up is skipped. */
+/**
+ * Next regular ring time of [alarm]; a ring time already replaced by a smart wake-up or
+ * skipped once by the user is passed over.
+ */
 fun nextRegularRing(alarm: Alarm, now: ZonedDateTime): Long {
     val target = alarm.smartWakeTarget
     val base = if (target != null && target >= now.toInstant().toEpochMilli()) {
@@ -33,7 +36,13 @@ fun nextRegularRing(alarm: Alarm, now: ZonedDateTime): Long {
     } else {
         now
     }
-    return nextTrigger(alarm.hour, alarm.minute, alarm.days, base).toInstant().toEpochMilli()
+    val next = nextTrigger(alarm.hour, alarm.minute, alarm.days, base)
+    val skip = alarm.skippedRing
+    return if (skip != null && next.toInstant().toEpochMilli() == skip) {
+        nextTrigger(alarm.hour, alarm.minute, alarm.days, next).toInstant().toEpochMilli()
+    } else {
+        next.toInstant().toEpochMilli()
+    }
 }
 
 /** "in 7 Std. 5 Min." style countdown. */
