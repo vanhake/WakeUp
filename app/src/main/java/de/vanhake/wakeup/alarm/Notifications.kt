@@ -19,6 +19,9 @@ import java.time.format.DateTimeFormatter
 object Notifications {
     const val CHANNEL_RINGING = "ringing"
     const val CHANNEL_SNOOZE = "snooze"
+
+    /** Silent channel for the ringing alarm while its screen is already visible: no pop-up over it. */
+    const val CHANNEL_ACTIVE = "ringing_active"
     const val ID_RINGING = 1
     private const val ID_SNOOZE_BASE = 1000
     private const val REQUEST_END_SNOOZE_BASE = 2000
@@ -40,28 +43,42 @@ object Notifications {
             context.getString(R.string.channel_snooze),
             NotificationManager.IMPORTANCE_LOW,
         )
-        nm.createNotificationChannels(listOf(ringing, snooze))
+        val active = NotificationChannel(
+            CHANNEL_ACTIVE,
+            context.getString(R.string.channel_active),
+            NotificationManager.IMPORTANCE_LOW,
+        ).apply {
+            setSound(null, null)
+            enableVibration(false)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+        }
+        nm.createNotificationChannels(listOf(ringing, snooze, active))
     }
 
-    fun ringing(context: Context, alarm: Alarm?): Notification {
+    /**
+     * [screenShown]: the ringing screen is already visible, so the notification only sits quietly in
+     * the status bar instead of popping up over the screen (and covering the snooze button).
+     */
+    fun ringing(context: Context, alarm: Alarm?, screenShown: Boolean = false): Notification {
         val intent = PendingIntent.getActivity(
             context, 0,
             Intent(context, AlarmActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         // Deliberately no "dismiss" or "snooze" actions: the alarm can only be stopped in the app.
-        return NotificationCompat.Builder(context, CHANNEL_RINGING)
+        val builder = NotificationCompat.Builder(context, if (screenShown) CHANNEL_ACTIVE else CHANNEL_RINGING)
             .setSmallIcon(R.drawable.ic_stat_alarm)
             .setContentTitle(alarm?.label?.ifBlank { null } ?: "Wecker")
-            .setContentText("Tippen, um die Aufgabe zu lösen")
+            .setContentText(if (screenShown) "Wecker klingelt" else "Tippen, um die Aufgabe zu lösen")
             .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setPriority(if (screenShown) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
             .setAutoCancel(false)
+            .setOnlyAlertOnce(true)
             .setContentIntent(intent)
-            .setFullScreenIntent(intent, true)
-            .build()
+        if (!screenShown) builder.setFullScreenIntent(intent, true)
+        return builder.build()
     }
 
     fun showSnoozed(context: Context, alarm: Alarm, until: Long) {
