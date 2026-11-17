@@ -2,4 +2,5 @@
     <string name="app_name">WakeUp</string>
     <string name="channel_ringing">Klingelnder Wecker</string>
     <string name="channel_snooze">Schlummern</string>
+    <string name="channel_active">Wecker aktiv</string>
 </resources>

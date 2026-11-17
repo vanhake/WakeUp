@@ -1,5 +1,6 @@
 package de.vanhake.wakeup.alarm
 
+import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -51,6 +52,7 @@ class AlarmService : Service() {
             ACTION_SNOOZE -> onSnooze()
             ACTION_DISMISS -> onDismiss()
             ACTION_QUIET -> setQuiet(intent.getBooleanExtra(EXTRA_QUIET, false))
+            ACTION_SCREEN_SHOWN -> onScreenShown()
             else -> if (current == null) stopSelf()
         }
         return START_NOT_STICKY
@@ -60,7 +62,8 @@ class AlarmService : Service() {
     private fun onFire(alarmId: Int, early: Boolean = false) {
         val alarm = AlarmRepository.get(alarmId)
         // startForegroundService() obliges us to call startForeground() in every case.
-        goForeground(alarm ?: current)
+        // Ending early happens in the open app: no pop-up over it.
+        goForeground(alarm ?: current, screenShown = early || current != null)
 
         val ringing = current
         if (ringing != null) {
@@ -140,8 +143,19 @@ class AlarmService : Service() {
         stopEverything()
     }
 
-    private fun goForeground(alarm: Alarm?) {
-        val notification = Notifications.ringing(this, alarm)
+    /** The ringing screen is visible: replace the pop-up notification by a quiet one. */
+    private fun onScreenShown() {
+        val alarm = current ?: return
+        try {
+            getSystemService(NotificationManager::class.java)
+                .notify(Notifications.ID_RINGING, Notifications.ringing(this, alarm, screenShown = true))
+        } catch (_: SecurityException) {
+            // Notification permission not granted; nothing to replace.
+        }
+    }
+
+    private fun goForeground(alarm: Alarm?, screenShown: Boolean = false) {
+        val notification = Notifications.ringing(this, alarm, screenShown)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             try {
                 ServiceCompat.startForeground(
@@ -283,6 +297,7 @@ class AlarmService : Service() {
         private const val ACTION_DISMISS = "de.vanhake.wakeup.service.DISMISS"
         private const val ACTION_QUIET = "de.vanhake.wakeup.service.QUIET"
         private const val ACTION_END_SNOOZE = "de.vanhake.wakeup.service.END_SNOOZE"
+        private const val ACTION_SCREEN_SHOWN = "de.vanhake.wakeup.service.SCREEN_SHOWN"
         private const val EXTRA_QUIET = "quiet"
 
         private val _ringingAlarmId = MutableStateFlow<Int?>(null)
@@ -320,6 +335,9 @@ class AlarmService : Service() {
 
         fun setQuiet(context: Context, quiet: Boolean) =
             send(context, Intent(ACTION_QUIET).putExtra(EXTRA_QUIET, quiet))
+
+        /** The ringing screen is visible, so the notification no longer needs to pop up. */
+        fun screenShown(context: Context) = send(context, Intent(ACTION_SCREEN_SHOWN))
 
         private fun send(context: Context, intent: Intent) {
             if (_ringingAlarmId.value == null) return

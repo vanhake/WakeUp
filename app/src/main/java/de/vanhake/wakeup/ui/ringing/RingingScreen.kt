@@ -55,6 +55,8 @@ fun RingingRoute(onSolved: (night: Long?) -> Unit) {
     val endingEarly by AlarmService.endingEarly.collectAsState()
     val alarms by AlarmRepository.alarms.collectAsState()
     val alarm = alarms.firstOrNull { it.id == ringingId } ?: return
+    // The screen is visible: the notification must not pop up over it and cover the snooze button.
+    LaunchedEffect(ringingId) { AlarmService.screenShown(context) }
     RingingScreen(
         alarm = alarm,
         onSnooze = { AlarmService.snooze(context) },
