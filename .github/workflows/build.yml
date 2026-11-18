@@ -40,6 +40,7 @@ jobs:
         with:
           name: WakeUp-${{ steps.version.outputs.name }}
           path: app/build/outputs/apk/debug/*.apk
+          retention-days: 3
 
   # Every push to main gets its own version (commit count), so publish it as a
   # signed release. Only this job sees the signing secrets.
@@ -93,6 +94,7 @@ jobs:
         with:
           name: WakeUp-${{ steps.version.outputs.name }}-release
           path: app/build/outputs/apk/release/*.apk
+          retention-days: 3
 
       - name: Create GitHub release
         env:
