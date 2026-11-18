@@ -29,6 +29,8 @@ data class NightRecording(
     val snoozes: Int = 0,
     /** The alarm rang early because a light sleep phase was detected. */
     val smartWake: Boolean = false,
+    /** When and why smart wake-up rang early (recorded since this was added). */
+    val smartWakeInfo: SmartWakeInfo? = null,
     /** Periods (epoch millis, start to end) in which an alarm rang and audio was ignored. */
     val ringing: List<LongRange> = emptyList(),
     val clips: List<SleepClip> = emptyList(),
@@ -68,6 +70,7 @@ data class NightRecording(
         alarmDismissAt?.let { put("alarmDismissAt", it) }
         put("snoozes", snoozes)
         put("smartWake", smartWake)
+        smartWakeInfo?.let { put("smartWakeInfo", it.toJson()) }
         put("ringing", JSONArray(ringing.map { JSONArray(listOf(it.first, it.last)) }))
         put("clips", JSONArray(clips.map {
             JSONObject()
@@ -143,6 +146,7 @@ data class NightRecording(
                 alarmDismissAt = if (o.has("alarmDismissAt")) o.getLong("alarmDismissAt") else null,
                 snoozes = o.optInt("snoozes", 0),
                 smartWake = o.optBoolean("smartWake", false),
+                smartWakeInfo = o.optJSONObject("smartWakeInfo")?.let(SmartWakeInfo::fromJson),
                 ringing = ringing,
                 clips = clips,
                 interrupted = o.optBoolean("interrupted", false),

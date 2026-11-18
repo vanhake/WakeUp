@@ -52,6 +52,8 @@ import de.vanhake.wakeup.sleep.analysis.NightRecording
 import de.vanhake.wakeup.sleep.analysis.SleepAnalyzer
 import de.vanhake.wakeup.sleep.analysis.SleepClip
 import de.vanhake.wakeup.sleep.analysis.SleepReport
+import de.vanhake.wakeup.sleep.analysis.SmartWakeInfo
+import de.vanhake.wakeup.sleep.analysis.SmartWakeTrigger
 import de.vanhake.wakeup.sleep.analysis.apneaLevel
 import de.vanhake.wakeup.ui.components.SectionTitle
 import de.vanhake.wakeup.ui.theme.Danger
@@ -178,12 +180,24 @@ private fun ReportContent(night: NightRecording, report: SleepReport, modifier: 
                 "Unruhig" to formatDuration(report.restlessMinutes),
                 "Aufwachen" to when {
                     night.alarmRingAt == null -> "ohne Wecker"
-                    night.snoozes == 0 -> if (night.smartWake) "Smart Wake" else "sofort"
+                    night.snoozes == 0 -> when {
+                        night.smartWakeInfo != null -> "Smart Wake, ${night.smartWakeInfo.minutesEarly} Min. früher"
+                        night.smartWake -> "Smart Wake"
+                        else -> "sofort"
+                    }
                     else -> "${night.snoozes}× geschlummert" +
                         (if (report.snoozeMinutes > 0) ", ${formatDuration(report.snoozeMinutes)}" else "")
                 },
             ),
         )
+        night.smartWakeInfo?.let { info ->
+            Spacer(Modifier.height(8.dp))
+            Text(
+                smartWakeReason(info),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
 
         SectionTitle("Schlafwert")
         ScoreBreakdown(report)
@@ -367,5 +381,17 @@ private fun Notice(text: String) {
             Spacer(Modifier.width(12.dp))
             Text(text, style = MaterialTheme.typography.bodyMedium)
         }
+    }
+}
+
+/** Why smart wake-up rang early, in words. */
+private fun smartWakeReason(info: SmartWakeInfo): String {
+    val d = info.decision
+    val early = "Smart Wake hat ${info.minutesEarly} Min. vor ${formatTime(info.target)} geweckt"
+    return when (d.trigger) {
+        SmartWakeTrigger.SCREEN -> "$early, weil du das Handy benutzt hast."
+        SmartWakeTrigger.MOVEMENT -> "$early: ${d.restlessMoves.size} Minuten mit " +
+            d.restlessMoves.joinToString(" und ") + " Bewegungen, sonst in der Nacht " +
+            "%.1f".format(d.baseline) + " pro Minute (ausgelöst ab ${d.threshold})."
     }
 }

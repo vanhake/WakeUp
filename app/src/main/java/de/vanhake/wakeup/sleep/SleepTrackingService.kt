@@ -39,6 +39,8 @@ import de.vanhake.wakeup.sleep.analysis.NightRecording
 import de.vanhake.wakeup.sleep.analysis.SAMPLE_RATE
 import de.vanhake.wakeup.sleep.analysis.ScreenEvent
 import de.vanhake.wakeup.sleep.analysis.SleepClip
+import de.vanhake.wakeup.sleep.analysis.SmartWake
+import de.vanhake.wakeup.sleep.analysis.SmartWakeInfo
 import de.vanhake.wakeup.sleep.analysis.YAMNET_WINDOW
 import de.vanhake.wakeup.sleep.analysis.labelFromScores
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -63,7 +65,7 @@ class SleepTrackingService : Service() {
     private var alarmRingAt: Long? = null
     private var alarmDismissAt: Long? = null
     private var snoozes = 0
-    private var smartWake = false
+    private var smartWake: SmartWakeInfo? = null
     private val motion = mutableListOf<Long>()
     @Volatile private var lux: Float? = null
     private var gravity: FloatArray? = null
@@ -306,7 +308,8 @@ class SleepTrackingService : Service() {
 
                 if (frameCount % FRAMES_PER_10S < 5) {
                     val wall = System.currentTimeMillis()
-                    if (!isRinging) checkSmartWake(live, nowMs, wall, smartWoken)
+                    val moves = live.minuteMovements(nowMs)
+                    if (!isRinging) checkSmartWake(moves, wall, smartWoken)
                     if (wall >= deadline) stopRequested = true
                     if (wall - lastCheckpoint >= CHECKPOINT_MS) {
                         lastCheckpoint = wall
@@ -359,11 +362,12 @@ class SleepTrackingService : Service() {
     }
 
     /**
-     * Rings an alarm with smart wake-up early when, inside its window, the sleeper moves
-     * (light sleep) or uses the phone. It is re-scheduled to ring right away through the
+     * Rings an alarm with smart wake-up early when, inside its window, [SmartWake.decide] sees
+     * lasting restlessness or phone use. It is re-scheduled to ring right away through the
      * normal alarm path, and the regular ring time is remembered so it is skipped.
+     * [moves]: movement sounds per finished minute of the recording.
      */
-    private fun checkSmartWake(live: LiveDetector, nowMs: Long, wall: Long, done: MutableSet<Long>) {
+    private fun checkSmartWake(moves: List<Int>, wall: Long, done: MutableSet<Long>) {
         if (wall - start < 2 * 60 * 60 * 1000L) return
         val now = ZonedDateTime.now()
         for (alarm in AlarmRepository.alarms.value) {
@@ -371,12 +375,19 @@ class SleepTrackingService : Service() {
             val target = AlarmScheduler.nextRegularTrigger(alarm, now)
             val before = target - wall
             if (before < 60_000 || before > alarm.smartWakeMinutes * 60_000L || target in done) continue
-            val screenOn = synchronized(lock) { screen.lastOrNull()?.on == true }
-            val felt = synchronized(lock) { motion.count { it >= wall - start - 3 * 60_000L } }
-            if (!screenOn && live.movementsSince(nowMs - 3 * 60_000L) + felt < 2) continue
+            val (screenOnFor, felt) = synchronized(lock) {
+                screen.lastOrNull()?.takeIf { it.on }?.let { wall - it.timeMs } to motion.toList()
+            }
+            val windowStart = target - alarm.smartWakeMinutes * 60_000L - start
+            val decision = SmartWake.decide(moves, felt, windowStart, screenOnFor) ?: continue
             done.add(target)
-            synchronized(lock) { smartWake = true }
-            Log.i(TAG, "Smart wake-up for alarm ${alarm.id}, ${before / 60_000} min early")
+            val info = SmartWakeInfo(ringAt = wall, target = target, decision = decision)
+            synchronized(lock) { if (smartWake == null) smartWake = info }
+            Log.i(
+                TAG,
+                "Smart wake-up for alarm ${alarm.id}, ${info.minutesEarly} min early: ${decision.trigger}, " +
+                    "moves ${decision.restlessMoves} ≥ ${decision.threshold} (baseline ${"%.2f".format(decision.baseline)}/min)",
+            )
             AlarmRepository.upsert(alarm.copy(smartWakeTarget = target))
             AlarmScheduler.scheduleAt(this, alarm.id, wall + 1_000)
         }
@@ -425,7 +436,8 @@ class SleepTrackingService : Service() {
                 alarmRingAt = alarmRingAt,
                 alarmDismissAt = alarmDismissAt,
                 snoozes = snoozes,
-                smartWake = smartWake,
+                smartWake = smartWake != null,
+                smartWakeInfo = smartWake,
                 ringing = ringing.toList() + listOfNotNull(ringingSince?.let { it..end }),
                 clips = clips.toList(),
                 interrupted = true,
