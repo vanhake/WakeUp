@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import de.vanhake.wakeup.sleep.analysis.RestState
 import de.vanhake.wakeup.sleep.analysis.ScoreParts
+import de.vanhake.wakeup.sleep.analysis.SleepAnalyzer
 import de.vanhake.wakeup.sleep.analysis.SleepReport
 import kotlin.math.roundToInt
 
@@ -43,8 +44,16 @@ fun ScoreBreakdown(report: SleepReport) {
     val rows = listOf(
         Triple("Schlafdauer", formatDuration(report.sleepMinutes), "volle Punkte bei 7–9 Std."),
         Triple("Effizienz", "${(report.efficiency * 100).roundToInt()} %", "volle Punkte ab 95 %"),
-        Triple("Ruhe", "${formatDuration(report.restlessMinutes)} unruhig", "volle Punkte ohne Unruhe"),
-        Triple("Wachphasen", "${report.awakenings}", "volle Punkte ohne Wachphase"),
+        Triple(
+            "Ruhe",
+            "${formatDuration(report.scoredRestlessMinutes)} unruhig",
+            "volle Punkte ohne Unruhe (ohne die letzten ${SleepAnalyzer.MORNING_MINUTES} Min.)",
+        ),
+        Triple(
+            "Wachphasen",
+            "${report.scoredAwakenings}",
+            "volle Punkte ohne Wachphase (ohne die letzten ${SleepAnalyzer.MORNING_MINUTES} Min.)",
+        ),
         Triple("Einschlafen", report.latencyMinutes?.let { formatDuration(it) } ?: "–", "volle Punkte bis 20 Min."),
     )
     Card(
@@ -139,7 +148,8 @@ fun AnalysisExplanation(report: SleepReport) {
                     RestState.RESTLESS,
                     "Mindestens zwei Bewegungen in einer Minute (Rascheln, Erschütterung, Husten oder Sprechen) " +
                         "oder zusammen mindestens 2 Sekunden Bewegungsgeräusch. Wer in der Minute 10 Sekunden " +
-                        "oder mehr schnarcht, gilt trotzdem als schlafend.",
+                        "oder mehr schnarcht, gilt trotzdem als schlafend. Leise, einzelne Atemgeräusche außerhalb " +
+                        "eines gleichmäßigen Atemrhythmus zählen nicht als Bewegung.",
                 )
                 StateParagraph(
                     RestState.AWAKE,
@@ -180,6 +190,9 @@ fun AnalysisExplanation(report: SleepReport) {
                         "• Effizienz, 20 Punkte: 0 bei 65 %, voll ab 95 %.\n" +
                         "• Ruhe, 15 Punkte: voll ohne Unruhe, 0 wenn 30 % der Schlafzeit unruhig waren.\n" +
                         "• Wachphasen, 15 Punkte: je Wachphase ein Sechstel weniger, ab 6 keine Punkte.\n" +
+                        "  Für Ruhe und Wachphasen zählen die letzten ${SleepAnalyzer.MORNING_MINUTES} Minuten vor dem " +
+                        "Aufwachen nicht: Leichter, unruhiger Schlaf am Morgen ist normal. So bekommt eine Nacht mit " +
+                        "Smart Wake keinen höheren Wert, nur weil der unruhige Teil abgeschnitten wurde.\n" +
                         "• Einschlafdauer, 10 Punkte: voll bis 20 Min., bei 60 Min. keine Punkte.",
                 )
             }

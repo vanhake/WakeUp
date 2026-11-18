@@ -31,7 +31,8 @@ data class Classification(
  *
  * Breathing and snoring are recognised by their rhythm: sounds of 0.25–3.5 s that repeat
  * every 1.5–10 s. Snoring is the loud, low-frequency variant. Everything else is movement
- * (rustling, bed creaking) or – if very loud or long – noise.
+ * (rustling, bed creaking) or – if very loud or long – noise. Quiet breath-length sounds outside
+ * a rhythm stay breathing, so that ordinary breathing is not taken for movement.
  *
  * If YAMNet [LabelWindow]s are available they take precedence: they recognise coughing and
  * speech, confirm snoring without a clear rhythm and stop speech or music from being taken
@@ -47,6 +48,8 @@ object BurstClassifier {
     private const val SNORE_MIN_ABOVE_DB = 10f
     private const val NOISE_ABOVE_DB = 20f
     private const val NOISE_MIN_MS = 4_000
+    /** A single breath-like sound this quiet is a breath outside a recognised rhythm, not movement. */
+    private const val QUIET_BREATH_DB = 10f
 
     const val APNEA_MIN_PAUSE_MS = 10_000L
     private const val APNEA_MAX_PAUSE_MS = 90_000L
@@ -55,6 +58,14 @@ object BurstClassifier {
 
     fun isRhythmicCandidate(b: Burst): Boolean =
         b.durationMs in MIN_RHYTHMIC_MS..MAX_RHYTHMIC_MS && b.peakAboveFloor < 40f
+
+    /**
+     * Quiet, breath-length sound that did not fit into a chain (the first breaths of a rhythm,
+     * a deeper sigh, a breath that broke the rhythm). Counting these as movement made normal
+     * breathing look restless.
+     */
+    fun isStrayBreath(b: Burst): Boolean =
+        isRhythmicCandidate(b) && b.peakAboveFloor < QUIET_BREATH_DB && b.lowRatio < SNORE_LOW_RATIO
 
     fun classify(bursts: List<Burst>, labels: List<LabelWindow> = emptyList()): Classification {
         val sorted = bursts.sortedBy { it.startMs }
@@ -78,10 +89,10 @@ object BurstClassifier {
         val types = HashMap<Burst, SoundType>(sorted.size * 2)
         chains.forEach { chain -> chain.bursts.forEach { types[it] = chain.type } }
         sorted.forEach { b ->
-            val heuristic = types[b] ?: if (b.peakAboveFloor >= NOISE_ABOVE_DB || b.durationMs >= NOISE_MIN_MS) {
-                SoundType.NOISE
-            } else {
-                SoundType.MOVEMENT
+            val heuristic = types[b] ?: when {
+                b.peakAboveFloor >= NOISE_ABOVE_DB || b.durationMs >= NOISE_MIN_MS -> SoundType.NOISE
+                isStrayBreath(b) -> SoundType.BREATH
+                else -> SoundType.MOVEMENT
             }
             types[b] = when (labelOf[b]) {
                 SoundLabel.COUGH -> SoundType.COUGH

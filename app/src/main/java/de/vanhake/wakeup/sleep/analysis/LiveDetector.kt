@@ -5,12 +5,14 @@ data class ClipRequest(val type: ClipType, val fromMs: Long, val toMs: Long)
 
 /**
  * Looks at bursts while the night is being recorded: decides which moments are worth an
- * audio sample and tells whether the sleeper is currently moving (for smart wake-up).
+ * audio sample and counts movement sounds per minute (for smart wake-up).
  */
 class LiveDetector(private val clipsEnabled: Boolean) {
     private val recent = ArrayDeque<Burst>()
+    private val recentLabels = ArrayDeque<LabelWindow>()
     private val lastClip = HashMap<ClipType, Long>()
     private var clips = 0
+    private val minuteMoves = ArrayList<Int>()
 
     fun onBurst(b: Burst): ClipRequest? {
         recent.addLast(b)
@@ -24,6 +26,8 @@ class LiveDetector(private val clipsEnabled: Boolean) {
 
     /** Keeps one sample of coughing and of talking in the sleep every 20 minutes at most. */
     fun onLabel(window: LabelWindow): ClipRequest? {
+        recentLabels.addLast(window)
+        while (recentLabels.first().startMs < window.startMs - KEEP_MS) recentLabels.removeFirst()
         val type = when (window.label) {
             SoundLabel.COUGH -> ClipType.COUGH
             SoundLabel.SPEECH -> ClipType.SPEECH
@@ -36,11 +40,29 @@ class LiveDetector(private val clipsEnabled: Boolean) {
         return ClipRequest(type, window.startMs - 3_000, window.endMs + 3_000)
     }
 
-    /** Movement sounds since [fromMs] (relative to the recording start). */
-    fun movementsSince(fromMs: Long): Int {
-        val window = recent.toList()
-        val classification = BurstClassifier.classify(window)
-        return window.count { it.startMs >= fromMs && classification.typeOf(it) == SoundType.MOVEMENT }
+    /**
+     * Movement sounds per minute of the recording (index = minute since the start), for every
+     * minute that ended at least [SETTLE_MS] before [nowMs] (relative to the recording start).
+     * The delay lets a breathing rhythm become recognisable before its first sounds are judged.
+     * Breathing, snoring, coughing, speech and music/TV (if the classifier heard them) do not
+     * count. Call it regularly (every few seconds): minutes older than a few minutes can no
+     * longer be classified and count as quiet.
+     */
+    fun minuteMovements(nowMs: Long): List<Int> {
+        val complete = ((nowMs - SETTLE_MS) / MINUTE_MS).toInt()
+        if (complete > minuteMoves.size) {
+            val window = recent.toList()
+            val classification = BurstClassifier.classify(window, recentLabels.toList())
+            val counts = HashMap<Int, Int>()
+            window.forEach { b ->
+                if (classification.typeOf(b) == SoundType.MOVEMENT) {
+                    val m = (b.startMs / MINUTE_MS).toInt()
+                    counts[m] = (counts[m] ?: 0) + 1
+                }
+            }
+            while (minuteMoves.size < complete) minuteMoves.add(counts[minuteMoves.size] ?: 0)
+        }
+        return minuteMoves
     }
 
     /** Breathing resumed after ≥ 10 s of silence that followed regular breathing. */
@@ -78,6 +100,8 @@ class LiveDetector(private val clipsEnabled: Boolean) {
 
     private companion object {
         const val KEEP_MS = 6 * 60_000L
+        const val MINUTE_MS = 60_000L
+        const val SETTLE_MS = 30_000L
         const val MAX_CLIPS = 30
     }
 }

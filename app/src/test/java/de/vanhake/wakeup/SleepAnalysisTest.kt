@@ -11,6 +11,9 @@ import de.vanhake.wakeup.sleep.analysis.RestState
 import de.vanhake.wakeup.sleep.analysis.ScreenEvent
 import de.vanhake.wakeup.sleep.analysis.SleepAnalyzer
 import de.vanhake.wakeup.sleep.analysis.SleepClip
+import de.vanhake.wakeup.sleep.analysis.SmartWakeDecision
+import de.vanhake.wakeup.sleep.analysis.SmartWakeInfo
+import de.vanhake.wakeup.sleep.analysis.SmartWakeTrigger
 import de.vanhake.wakeup.sleep.analysis.SoundLabel
 import de.vanhake.wakeup.sleep.analysis.SoundType
 import org.json.JSONObject
@@ -205,6 +208,11 @@ class SleepAnalysisTest {
         val n = night().copy(
             snoozes = 2,
             smartWake = true,
+            smartWakeInfo = SmartWakeInfo(
+                ringAt = 1_793_028_000_000L,
+                target = 1_793_029_200_000L,
+                decision = SmartWakeDecision(SmartWakeTrigger.MOVEMENT, listOf(3, 4), 2, 0.25f),
+            ),
             ringing = listOf(1L..5L),
             clips = listOf(SleepClip(ClipType.APNEA, 1_793_000_100_000L, "a.wav", 24_000)),
             interrupted = true,
@@ -239,10 +247,54 @@ class SleepAnalysisTest {
     }
 
     @Test
-    fun liveDetectorCountsMovements() {
+    fun liveDetectorCountsMovementsPerMinute() {
         val live = LiveDetector(clipsEnabled = false)
         listOf(rustle(0), rustle(60_000), rustle(61_000), rustle(130_000)).forEach { live.onBurst(it) }
-        assertEquals(3, live.movementsSince(30_000))
+        // Minute 2 has not settled yet.
+        assertEquals(listOf(1, 2), live.minuteMovements(150_000))
+        assertEquals(listOf(1, 2, 1), live.minuteMovements(210_000))
+    }
+
+    @Test
+    fun liveDetectorDoesNotCountBreathingAsMovement() {
+        val live = LiveDetector(clipsEnabled = false)
+        // Breathing every 4 s with a few breaths out of rhythm and a deeper sigh.
+        val regular = (0 until 90).map { breath(it * 4_000L) }
+        val stray = listOf(breath(10_500), breath(95_300), breath(171_700).copy(durationMs = 2_400))
+        (regular + stray).sortedBy { it.startMs }.forEach { live.onBurst(it) }
+        assertEquals(listOf(0, 0, 0, 0, 0), live.minuteMovements(5 * minute + 30_000))
+    }
+
+    @Test
+    fun strayQuietBreathIsNotMovement() {
+        val c = BurstClassifier.classify(listOf(breath(0), rustle(20_000)))
+        assertEquals(SoundType.BREATH, c.typeOf(breath(0)))
+        assertEquals(SoundType.MOVEMENT, c.typeOf(rustle(20_000)))
+    }
+
+    @Test
+    fun morningRestlessnessDoesNotChangeTheScore() {
+        val n = night()
+        val alarm = n.alarmRingAt!! - n.start
+        // Restless every other minute in the half hour before the alarm (light morning sleep).
+        val morning = (2..28 step 2).flatMap { k ->
+            val m = alarm - k * minute
+            listOf(rustle(m + 5_000), rustle(m + 30_000))
+        }
+        val r = SleepAnalyzer.analyze(n.copy(bursts = (n.bursts + morning).sortedBy { it.startMs }))
+        val calm = SleepAnalyzer.analyze(n)
+        assertTrue(r.restlessMinutes > calm.restlessMinutes)
+        assertEquals(calm.scoredRestlessMinutes, r.scoredRestlessMinutes)
+        assertEquals(calm.score, r.score)
+    }
+
+    @Test
+    fun restlessnessInTheNightStillCounts() {
+        val n = night()
+        val restless = (200 until 240 step 2).flatMap { m -> listOf(rustle(m * minute + 5_000), rustle(m * minute + 30_000)) }
+        val r = SleepAnalyzer.analyze(n.copy(bursts = (n.bursts + restless).sortedBy { it.startMs }))
+        assertEquals(20, r.scoredRestlessMinutes)
+        assertTrue(r.score < SleepAnalyzer.analyze(n).score)
     }
 
     @Test

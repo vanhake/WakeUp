@@ -98,6 +98,20 @@ Sauerstoffsättigung und Hirnströme – hier hilft nur eine Smartwatch (Health 
 - Optional pro Wecker ein **Weckfenster** (z. B. 20 min vor der Weckzeit). Erkennt die Analyse
   in diesem Fenster eine unruhige/leichte Phase (Bewegung, Atmung unregelmäßig), klingelt der
   Wecker früher – spätestens aber zur eingestellten Zeit. Die Aufgaben-Logik bleibt unverändert.
+- Umsetzung (`SmartWake.kt`): Mikrofon und Beschleunigungssensor sehen keine Schlafphasen, nur
+  Geräusche und Erschütterungen. Deshalb entscheidet Smart Wake vorsichtig:
+  - Bewegungen werden pro Minute gezählt (Geräusche + Sensor). Leise, einzelne Atemgeräusche,
+    Schnarchen, Husten, Sprechen und Musik/TV zählen nicht.
+  - Unruhig heißt: mindestens 2 Bewegungen pro Minute **und** mindestens das Dreifache des
+    Durchschnitts der 2 Stunden vor dem Fenster. Ein dauerhaft lauter Raum hebt die Schwelle an.
+  - Die Unruhe muss 2 Minuten am Stück anhalten, beide Minuten innerhalb des Fensters – der
+    Wecker klingelt also nie direkt zu Beginn des Fensters wegen etwas, das davor war.
+  - Handy mindestens 15 Sekunden benutzt = wach.
+  - Auslöser, Bewegungen, Schwelle und Durchschnitt werden in der Nacht gespeichert und im
+    Schlafbericht angezeigt.
+- Schlafwert: Für Ruhe und Wachphasen zählen die letzten 30 Minuten vor dem Aufwachen nicht
+  (leichter Morgenschlaf ist normal). Sonst hätte eine Nacht mit Smart Wake automatisch einen
+  höheren Wert, weil der unruhige Teil abgeschnitten wird.
 
 ---
 

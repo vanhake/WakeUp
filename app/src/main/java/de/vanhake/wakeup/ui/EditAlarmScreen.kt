@@ -469,8 +469,9 @@ private fun SmartWakeSettings(alarm: Alarm, onChange: (Alarm) -> Unit) {
         if (alarm.smartWakeMinutes == 0) {
             "Weckt immer genau zur eingestellten Zeit."
         } else {
-            "Klingelt bis zu ${alarm.smartWakeMinutes} Min früher, wenn die Schlafanalyse eine leichte " +
-                "Schlafphase erkennt (Bewegung). Funktioniert nur, während die Schlafaufzeichnung läuft."
+            "Klingelt bis zu ${alarm.smartWakeMinutes} Min früher, wenn du in diesem Zeitraum mindestens " +
+                "2 Minuten lang deutlich unruhiger bist als sonst in der Nacht oder das Handy benutzt. " +
+                "Sonst klingelt er zur eingestellten Zeit. Funktioniert nur, während die Schlafaufzeichnung läuft."
         },
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,

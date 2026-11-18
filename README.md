@@ -40,8 +40,9 @@ Einstellungen (Zahnrad).
   ersten Entsperren.
 - **Standard für neue Wecker** – Uhrzeit, Tage, Aufgabe, Schlummern, Smart Wake und Ton, mit denen
   ein neuer Wecker startet.
-- **Smart Wake** – weckt bis zu 10, 20 oder 30 Minuten früher, wenn die Schlafanalyse eine leichte
-  Schlafphase erkennt.
+- **Smart Wake** – weckt bis zu 10, 20 oder 30 Minuten früher, wenn du in diesem Zeitraum mindestens
+  2 Minuten lang deutlich unruhiger bist als sonst in der Nacht oder das Handy benutzt; sonst zur
+  eingestellten Zeit. Der Schlafbericht zeigt, wann und warum Smart Wake geweckt hat.
 - **Nach dem Ausschalten** öffnet sich direkt der Schlafbericht, falls die Nacht aufgezeichnet
   wurde.
 - Dunkles, schlichtes Design mit großen, weit auseinanderliegenden Knöpfen.

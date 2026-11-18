@@ -69,6 +69,10 @@ data class SleepReport(
     val classifierUsed: Boolean = false,
     /** The accelerometer felt movements, i.e. the phone lay on the mattress. */
     val usedMotion: Boolean = false,
+    /** Restless minutes counted for the score: without the last [SleepAnalyzer.MORNING_MINUTES] before waking. */
+    val scoredRestlessMinutes: Int = restlessMinutes,
+    /** Awakenings counted for the score: without the last [SleepAnalyzer.MORNING_MINUTES] before waking. */
+    val scoredAwakenings: Int = awakenings,
 ) {
     val snorePercent: Int get() = if (sleepMinutes > 0) (snoreMinutes * 100f / sleepMinutes).roundToInt() else 0
 }
@@ -93,6 +97,13 @@ object SleepAnalyzer {
     private const val ONSET_WINDOW = 15
     private const val RESTLESS_RUN_AWAKE = 6
     private const val SNORING_MINUTE_SEC = 10
+
+    /**
+     * Light, restless sleep shortly before waking is normal. Ending the night early (smart
+     * wake-up) would cut exactly this part off and raise the score without better sleep, so
+     * restlessness and awakenings in these last minutes do not count for any night.
+     */
+    const val MORNING_MINUTES = 30
     private const val LIT = 5f
     private const val DARK = 2f
 
@@ -233,7 +244,17 @@ object SleepAnalyzer {
         val quiet = night.minutes.map { it.floorDb }.sorted().let { if (it.isEmpty()) 0f else it[it.size / 10] }
         val noise = List(n) { m -> night.minutes.getOrNull(m)?.let { (it.avgDb - quiet).coerceAtLeast(0f) } ?: 0f }
 
-        val parts = scoreParts(sleepMinutes, efficiency, restlessMinutes, awakenings, latency)
+        // Restlessness and awakenings for the score, without the morning before waking.
+        val scoredRange = if (sleepRange.isEmpty()) sleepRange else {
+            sleepRange.first until maxOf(sleepRange.first + 1, sleepRange.last + 1 - MORNING_MINUTES)
+        }
+        val scoredRestless = scoredRange.count { states[it] == RestState.RESTLESS }
+        var scoredAwakenings = 0
+        for (m in scoredRange) {
+            if (states[m] == RestState.AWAKE && (m == scoredRange.first || states[m - 1] != RestState.AWAKE)) scoredAwakenings++
+        }
+
+        val parts = scoreParts(sleepMinutes, efficiency, scoredRestless, scoredAwakenings, latency)
         val score = parts?.total ?: 0
 
         fun inSleepRange(relMs: Long) = (relMs / MINUTE).toInt() in sleepRange
@@ -277,6 +298,8 @@ object SleepAnalyzer {
             lightsOff = lightsOff,
             classifierUsed = night.classifierUsed,
             usedMotion = night.motion.isNotEmpty(),
+            scoredRestlessMinutes = scoredRestless,
+            scoredAwakenings = scoredAwakenings,
         )
     }
 
